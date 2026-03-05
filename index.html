@@ -1965,7 +1965,7 @@
                             <label class="form-label">
                                 <i class="fas fa-code-branch"></i> 版本 <span style="font-weight: normal; color: var(--text-muted); font-size: 0.8rem;">(可选)</span>
                             </label>
-                            <input type="text" class="form-input" id="promptVersion" placeholder="例如: v1.0.0">
+                            <input type="text" class="form-input" id="promptVersion" placeholder="例如: v1.0.0" style="color: var(--text-muted);">
                         </div>
                         <div class="form-group" style="flex: 2;">
                             <label class="form-label">标签</label>
@@ -2606,8 +2606,7 @@
                     updateStats();
                     renderTags();
                     updateDataSourceStatus();
-                    showToast('数据文件已加载');
-                    showToast('现在可以直接保存到原文件', 'success');
+                    showToast('数据文件已加载，可直接保存到原文件', 'success');
                 } catch (e) {
                     console.error('File load error:', e);
                     showToast('文件格式错误: ' + e.message, 'error');
@@ -3664,9 +3663,14 @@
             renderPrompts();
             updateStats();
             renderTags();
+            
+            // Auto-save to file if we have a file handle
+            if (currentFileHandle) {
+                await saveToFile();
+            }
         }
         
-        // Auto-save to localStorage (File System Access API removed for compatibility)
+        // Auto-save to localStorage
         function autoSaveToFile() {
             // Always save to localStorage as backup
             saveToLocalStorage();
