@@ -2630,7 +2630,8 @@
                     currentTag = null;
                     renderCategories();
         // Save to File - using File System Access API
-        async function saveToFile() {
+        // @param {boolean} silent - if true, don't show toast on success (used when called from savePrompt)
+        async function saveToFile(silent = false) {
             const exportData = {
                 prompts: prompts,
                 customCategories: customCategories,
@@ -2656,7 +2657,9 @@
                 
                 hasUnsavedChanges = false;
                 updateDataSourceStatus();
-                showToast('✓ 已保存到文件', 'success');
+                if (!silent) {
+                    showToast('✓ 已保存到文件', 'success');
+                }
             } catch (e) {
                 console.error('Save failed:', e);
                 showToast('保存失败: ' + e.message, 'error');
@@ -3664,9 +3667,9 @@
             updateStats();
             renderTags();
             
-            // Auto-save to file if we have a file handle
+            // Auto-save to file if we have a file handle (silent mode to avoid duplicate toast)
             if (currentFileHandle) {
-                await saveToFile();
+                await saveToFile(true);
             }
         }
         
