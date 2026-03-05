@@ -1779,12 +1779,8 @@
         </button>
         <button class="btn btn-sm btn-primary" onclick="saveToFile()" id="saveBtn">
             <i class="fas fa-save"></i>
-            保存到文件
+            保存
         </button>
-        <span id="saveModeTip" style="margin-left: 8px; font-size: 0.75rem; color: var(--text-muted); display: none;">
-            <i class="fas fa-info-circle"></i>
-            <span id="saveModeText"></span>
-        </span>
     </div>
 
     <!-- Main Container -->
@@ -2439,35 +2435,12 @@
             });
         });
 
-        // Update save mode tip
-        function updateSaveModeTip() {
-            const tipEl = document.getElementById('saveModeTip');
-            const textEl = document.getElementById('saveModeText');
-            
-            if (!tipEl || !textEl) return;
-            
-            if (currentFileHandle) {
-                tipEl.style.display = 'inline';
-                textEl.textContent = '直接保存模式';
-                tipEl.style.color = 'var(--success)';
-            } else if (!isFileSystemAccessSupported()) {
-                tipEl.style.display = 'inline';
-                textEl.textContent = '下载模式（您的浏览器不支持直接保存）';
-                tipEl.style.color = 'var(--warning)';
-            } else {
-                tipEl.style.display = 'none';
-            }
-        }
-
         // Update Data Source Status UI
         function updateDataSourceStatus() {
             const statusEl = document.getElementById('dataSourceStatus');
             const statusText = document.getElementById('dataSourceText');
             
             if (!statusEl || !statusText) return;
-            
-            // Also update save mode tip
-            updateSaveModeTip();
 
             // Check if we have data in localStorage
             const hasLocalData = localStorage.getItem('promptToolsData') !== null;
