@@ -1713,6 +1713,32 @@
     </style>
 </head>
 <body>
+    <!-- Browser Check Blocker -->
+    <div id="browserBlocker" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--bg); z-index: 99999; flex-direction: column; align-items: center; justify-content: center; padding: 40px; text-align: center;">
+        <div style="max-width: 500px;">
+            <div style="font-size: 4rem; margin-bottom: 20px;">🚫</div>
+            <h1 style="margin-bottom: 16px; color: var(--text);">浏览器不支持</h1>
+            <p style="color: var(--text-secondary); margin-bottom: 24px; line-height: 1.6;">
+                本工具需要使用 <strong>File System Access API</strong> 实现本地文件实时保存功能。<br><br>
+                您当前使用的浏览器不支持此功能。
+            </p>
+            <div style="background: var(--bg-card); padding: 20px; border-radius: 12px; margin-bottom: 24px; border: 1px solid var(--border);">
+                <div style="font-weight: 600; margin-bottom: 12px; color: var(--text);">请使用以下浏览器：</div>
+                <div style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;">
+                    <a href="https://www.google.com/chrome/" target="_blank" style="display: flex; align-items: center; gap: 8px; padding: 12px 20px; background: #4285f4; color: white; border-radius: 8px; text-decoration: none; font-weight: 500;">
+                        <i class="fab fa-chrome"></i> Chrome
+                    </a>
+                    <a href="https://www.microsoft.com/edge" target="_blank" style="display: flex; align-items: center; gap: 8px; padding: 12px 20px; background: #0078d4; color: white; border-radius: 8px; text-decoration: none; font-weight: 500;">
+                        <i class="fab fa-edge"></i> Edge
+                    </a>
+                </div>
+            </div>
+            <div style="font-size: 0.85rem; color: var(--text-muted);">
+                或者使用 <a href="#" style="color: var(--accent);">数据库版本</a>（支持所有浏览器）
+            </div>
+        </div>
+    </div>
+
     <!-- Header -->
     <header class="header">
         <div class="header-content">
@@ -1999,9 +2025,9 @@
                             <i class="fas fa-file-circle-plus"></i>
                         </div>
                         <h4>创建新数据</h4>
-                        <p>从零开始创建新的提示词数据库</p>
+                        <p>创建新的提示词数据库文件</p>
                     </div>
-                    <div class="file-option" onclick="selectExistingFile()">
+                    <div class="file-option" onclick="selectFileWithPicker()">
                         <div class="file-option-icon">
                             <i class="fas fa-folder-open"></i>
                         </div>
@@ -2009,44 +2035,6 @@
                         <p>选择已有的 JSON 文件继续编辑</p>
                     </div>
                 </div>
-                <div class="file-option-divider">高级选项（支持实时保存）</div>
-                <div class="file-option" onclick="selectFileWithPicker()" id="advancedFileOption" style="display: none;">
-                    <div class="file-option-icon">
-                        <i class="fas fa-file-import"></i>
-                    </div>
-                    <h4>打开文件（高级模式）</h4>
-                    <p>使用系统文件选择器，支持直接保存到原文件</p>
-                </div>
-                <div id="browserSupportTip" style="display: none; padding: 12px; background: var(--bg-hover); border-radius: 8px; margin-top: 12px; font-size: 0.85rem; color: var(--text-secondary);">
-                    <i class="fas fa-info-circle" style="color: var(--accent);"></i>
-                    <span id="browserTipText"></span>
-                </div>
-                <div id="browserWarningTip" style="display: none; padding: 16px; background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); border-radius: 8px; margin-top: 12px; font-size: 0.85rem; color: var(--text-secondary);">
-                    <div style="display: flex; align-items: flex-start; gap: 10px;">
-                        <i class="fas fa-exclamation-triangle" style="color: var(--warning); margin-top: 2px;"></i>
-                        <div>
-                            <strong style="color: var(--warning); display: block; margin-bottom: 6px;">您的浏览器不支持实时保存功能</strong>
-                            <span id="browserWarningText"></span>
-                            <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255, 193, 7, 0.2);">
-                                <strong>建议方案：</strong>
-                                <ul style="margin: 6px 0; padding-left: 18px;">
-                                    <li>使用 <strong>Chrome</strong> 或 <strong>Edge</strong> 浏览器获得最佳体验</li>
-                                    <li>当前浏览器可使用"打开文件"，但保存时会下载新文件</li>
-                                    <li>数据会自动备份到浏览器本地，刷新不会丢失</li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="file-option-divider">或者</div>
-                <div class="file-option memory-option" onclick="useMemoryMode()">
-                    <div class="file-option-icon">
-                        <i class="fas fa-memory"></i>
-                    </div>
-                    <h4>临时模式</h4>
-                    <p>仅在当前会话使用，刷新后数据丢失</p>
-                </div>
-                <input type="file" id="fallbackFileInput" accept=".json" style="display: none;" onchange="handleFallbackFileSelect(this)">
             </div>
         </div>
     </div>
@@ -2525,44 +2513,40 @@
             renderTags();
             updateDataSourceStatus();
             
-            // If File System Access API is supported, ask to select save location
-            if (isFileSystemAccessSupported()) {
-                try {
-                    const fileHandle = await window.showSaveFilePicker({
-                        suggestedName: 'prompts_data.json',
-                        types: [{
-                            description: 'JSON Files',
-                            accept: { 'application/json': ['.json'] }
-                        }]
-                    });
-                    
-                    currentFileHandle = fileHandle;
-                    
-                    // Save immediately
-                    const exportData = {
-                        prompts: [],
-                        customCategories: {},
-                        customTags: [],
-                        featuredPrompts: [],
-                        promptVersions: {},
-                        exportDate: new Date().toISOString()
-                    };
-                    
-                    const writable = await fileHandle.createWritable();
-                    await writable.write(JSON.stringify(exportData, null, 2));
-                    await writable.close();
-                    
-                    showToast('已创建并保存新数据文件', 'success');
-                } catch (e) {
-                    if (e.name !== 'AbortError') {
-                        console.error('Create file error:', e);
-                        showToast('创建文件失败，您可以稍后再保存', 'error');
-                    } else {
-                        showToast('已创建新数据，请点击"保存"按钮保存到文件');
-                    }
+            // Ask to select save location
+            try {
+                const fileHandle = await window.showSaveFilePicker({
+                    suggestedName: 'prompts_data.json',
+                    types: [{
+                        description: 'JSON Files',
+                        accept: { 'application/json': ['.json'] }
+                    }]
+                });
+                
+                currentFileHandle = fileHandle;
+                
+                // Save immediately
+                const exportData = {
+                    prompts: [],
+                    customCategories: {},
+                    customTags: [],
+                    featuredPrompts: [],
+                    promptVersions: {},
+                    exportDate: new Date().toISOString()
+                };
+                
+                const writable = await fileHandle.createWritable();
+                await writable.write(JSON.stringify(exportData, null, 2));
+                await writable.close();
+                
+                showToast('已创建并保存新数据文件', 'success');
+            } catch (e) {
+                if (e.name !== 'AbortError') {
+                    console.error('Create file error:', e);
+                    showToast('创建文件失败，您可以稍后再保存', 'error');
+                } else {
+                    showToast('已创建新数据，请点击"保存"按钮保存到文件');
                 }
-            } else {
-                showToast('已创建新数据，请点击"保存"按钮保存到文件');
             }
         }
 
@@ -2571,7 +2555,7 @@
             return 'showOpenFilePicker' in window && 'showSaveFilePicker' in window;
         }
         
-        // Detect browser and show appropriate tip
+        // Detect browser
         function detectBrowser() {
             const ua = navigator.userAgent;
             if (ua.includes('Chrome') && !ua.includes('Edg')) return 'Chrome';
@@ -2581,62 +2565,27 @@
             return 'Other';
         }
         
-        // Show browser support info
-        function showBrowserSupportInfo() {
-            const advancedOption = document.getElementById('advancedFileOption');
-            const tipBox = document.getElementById('browserSupportTip');
-            const tipText = document.getElementById('browserTipText');
-            const warningBox = document.getElementById('browserWarningTip');
-            const warningText = document.getElementById('browserWarningText');
+        // Strict browser check - only Chrome/Edge allowed
+        function checkBrowserCompatibility() {
             const browser = detectBrowser();
+            const isSupported = (browser === 'Chrome' || browser === 'Edge') && isFileSystemAccessSupported();
             
-            if (isFileSystemAccessSupported()) {
-                // Supported browser (Chrome/Edge)
-                if (advancedOption) {
-                    advancedOption.style.display = 'flex';
+            if (!isSupported) {
+                // Show blocker
+                const blocker = document.getElementById('browserBlocker');
+                if (blocker) {
+                    blocker.style.display = 'flex';
                 }
-                if (tipBox && tipText) {
-                    tipBox.style.display = 'block';
-                    tipText.innerHTML = `您正在使用 ${browser}，支持<strong>高级模式</strong>，可以直接保存到原文件。`;
-                }
-                if (warningBox) {
-                    warningBox.style.display = 'none';
-                }
-            } else {
-                // Not supported (Safari/Firefox)
-                if (advancedOption) {
-                    advancedOption.style.display = 'none';
-                }
-                if (tipBox) {
-                    tipBox.style.display = 'none';
-                }
-                if (warningBox && warningText) {
-                    warningBox.style.display = 'block';
-                    warningText.innerHTML = `您正在使用 <strong>${browser}</strong>，该浏览器不支持 File System Access API，无法实现"实时保存到原文件"功能。`;
-                }
+                return false;
             }
+            return true;
         }
         
-        // Show browser info when modal opens
-        const originalOpenDataFile = openDataFile;
-        openDataFile = function() {
-            originalOpenDataFile();
-            showBrowserSupportInfo();
-        }
+        // Run check on load
+        checkBrowserCompatibility();
         
-        // Select Existing File - using traditional input for better compatibility
-        function selectExistingFile() {
-            // Use the fallback input which is more reliable
-            document.getElementById('fallbackFileInput').click();
-        }
-        
-        // Select file using File System Access API (advanced mode with real-time save)
+        // Select file using File System Access API
         async function selectFileWithPicker() {
-            if (!isFileSystemAccessSupported()) {
-                showToast('您的浏览器不支持此功能，请使用"打开文件"选项', 'error');
-                return;
-            }
-            
             try {
                 const [fileHandle] = await window.showOpenFilePicker({
                     types: [{
@@ -2684,7 +2633,7 @@
                     updateStats();
                     renderTags();
                     updateDataSourceStatus();
-                    showToast('数据文件已加载（高级模式）');
+                    showToast('数据文件已加载');
                     showToast('现在可以直接保存到原文件', 'success');
                 } catch (e) {
                     console.error('File load error:', e);
@@ -2699,61 +2648,6 @@
                 }
             }
         }
-
-        // Use Memory Mode
-        function useMemoryMode() {
-            closeFileHandleModal();
-            
-            prompts = [];
-            customCategories = {};
-            customTags = new Set();
-            featuredPrompts = new Set();
-            promptVersions = {};
-            hasUnsavedChanges = false;
-            currentFileHandle = null;
-            renderCategories();
-            renderPrompts();
-            updateStats();
-            renderTags();
-            updateDataSourceStatus();
-            showToast('已切换到临时模式');
-        }
-        
-        // Fallback file select using traditional input (for when File System Access API doesn't work)
-        async function handleFallbackFileSelect(input) {
-            const file = input.files[0];
-            if (!file) return;
-            
-            closeFileHandleModal();
-            
-            try {
-                const content = await file.text();
-                
-                try {
-                    const data = JSON.parse(content);
-                    
-                    // Support both old format (array) and new format (object with metadata)
-                    if (Array.isArray(data)) {
-                        prompts = data.map(p => ({
-                            ...p,
-                            tags: Array.isArray(p.tags) ? p.tags.map(String) : []
-                        }));
-                        customCategories = {};
-                        customTags = new Set();
-                        featuredPrompts = new Set();
-                        promptVersions = {};
-                    } else if (data && typeof data === 'object' && Array.isArray(data.prompts)) {
-                        prompts = data.prompts.map(p => ({
-                            ...p,
-                            tags: Array.isArray(p.tags) ? p.tags.map(String) : []
-                        }));
-                        customCategories = data.customCategories || {};
-                        customTags = new Set((data.customTags || []).map(String));
-                        featuredPrompts = new Set((data.featuredPrompts || []).map(String));
-                        promptVersions = data.promptVersions || {};
-                    } else {
-                        throw new Error('Invalid format');
-                    }
                     
                     // Store file reference for saving (using File System Access API if available)
                     // Note: We can't get a writable handle from a file input, so we'll need to use "Save As" next time
@@ -2763,25 +2657,7 @@
                     currentCategory = 'all';
                     currentTag = null;
                     renderCategories();
-                    renderPrompts();
-                    updateStats();
-                    renderTags();
-                    updateDataSourceStatus();
-                    showToast('数据文件已加载（传统方式）');
-                    showToast('提示：下次保存时需要选择保存位置', 'success');
-                } catch (e) {
-                    console.error('File load error:', e);
-                    showToast('文件格式错误: ' + e.message, 'error');
-                }
-            } catch (e) {
-                showToast('读取文件失败: ' + e.message, 'error');
-            }
-            
-            // Reset input
-            input.value = '';
-        }
-
-        // Save to File - using File System Access API if available, otherwise download
+        // Save to File - using File System Access API
         async function saveToFile() {
             const exportData = {
                 prompts: prompts,
@@ -2794,53 +2670,25 @@
             
             const data = JSON.stringify(exportData, null, 2);
             
-            // If we have a file handle from File System Access API, write directly to it
-            if (currentFileHandle) {
-                try {
-                    const writable = await currentFileHandle.createWritable();
-                    await writable.write(data);
-                    await writable.close();
-                    
-                    hasUnsavedChanges = false;
-                    updateDataSourceStatus();
-                    showToast('✓ 已保存到文件', 'success');
-                    
-                    // Clear localStorage after successful file save
-                    clearLocalStorage();
-                    return;
-                } catch (e) {
-                    console.error('Direct save failed:', e);
-                    showToast('直接保存失败，将使用下载方式', 'error');
-                    // Fall through to download method
-                }
+            // Write directly to file using File System Access API
+            if (!currentFileHandle) {
+                showToast('请先选择文件', 'error');
+                openDataFile();
+                return;
             }
             
-            // Fallback to download method
-            const blob = new Blob([data], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            
-            const now = new Date();
-            const dateStr = now.getFullYear() + 
-                String(now.getMonth() + 1).padStart(2, '0') + 
-                String(now.getDate()).padStart(2, '0') + '_' +
-                String(now.getHours()).padStart(2, '0') +
-                String(now.getMinutes()).padStart(2, '0') +
-                String(now.getSeconds()).padStart(2, '0');
-            a.download = `prompts_${dateStr}.json`;
-            
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            
-            hasUnsavedChanges = false;
-            updateDataSourceStatus();
-            showToast('✓ 文件已下载', 'success');
-            
-            // Clear localStorage after successful file save
-            clearLocalStorage();
+            try {
+                const writable = await currentFileHandle.createWritable();
+                await writable.write(data);
+                await writable.close();
+                
+                hasUnsavedChanges = false;
+                updateDataSourceStatus();
+                showToast('✓ 已保存到文件', 'success');
+            } catch (e) {
+                console.error('Save failed:', e);
+                showToast('保存失败: ' + e.message, 'error');
+            }
         }
 
         // Dark Mode
