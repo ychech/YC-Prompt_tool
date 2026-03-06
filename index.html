@@ -2334,23 +2334,39 @@
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
-            // Try to load from localStorage first (for HTTP deployment compatibility)
-            loadFromLocalStorage();
-            
-            renderCategories();
-            renderPrompts();
-            updateStats();
-            renderTags();
-            updateDataSourceStatus();
+            try {
+                // Try to load from localStorage first (for HTTP deployment compatibility)
+                loadFromLocalStorage();
+                
+                renderCategories();
+                renderPrompts();
+                updateStats();
+                renderTags();
+                updateDataSourceStatus();
 
-            // Listen for content changes to detect variables
-            document.getElementById('promptContent').addEventListener('input', detectVariables);
+                // Listen for content changes to detect variables
+                const promptContent = document.getElementById('promptContent');
+                if (promptContent) {
+                    promptContent.addEventListener('input', detectVariables);
+                }
+            } catch (err) {
+                console.error('Initialization error:', err);
+                showToast('初始化失败: ' + err.message, 'error');
+            }
 
             // Warn before leaving if there are unsaved changes (only if localStorage is not available)
             window.addEventListener('beforeunload', (e) => {
-                if (hasUnsavedChanges && !localStorage.getItem('promptToolsData')) {
-                    e.preventDefault();
-                    e.returnValue = '';
+                try {
+                    if (hasUnsavedChanges && !localStorage.getItem('promptToolsData')) {
+                        e.preventDefault();
+                        e.returnValue = '';
+                    }
+                } catch (err) {
+                    // localStorage might be disabled
+                    if (hasUnsavedChanges) {
+                        e.preventDefault();
+                        e.returnValue = '';
+                    }
                 }
             });
             
@@ -2374,63 +2390,78 @@
             
             // Handle window resize
             window.addEventListener('resize', () => {
-                const sidebar = document.getElementById('sidebar');
-                const toggleBtn = document.getElementById('sidebarToggle');
-                if (!sidebar || !toggleBtn) return;
-                
-                const isCollapsed = sidebar.classList.contains('collapsed');
-                if (window.innerWidth > 1024) {
-                    // Desktop: show toggle button only when collapsed
-                    toggleBtn.style.setProperty('display', isCollapsed ? 'flex' : 'none', 'important');
-                } else {
-                    // Mobile: always show toggle button
-                    toggleBtn.style.setProperty('display', 'flex', 'important');
+                try {
+                    const sidebar = document.getElementById('sidebar');
+                    const toggleBtn = document.getElementById('sidebarToggle');
+                    if (!sidebar || !toggleBtn) return;
+                    
+                    const isCollapsed = sidebar.classList.contains('collapsed');
+                    if (window.innerWidth > 1024) {
+                        // Desktop: show toggle button only when collapsed
+                        toggleBtn.style.setProperty('display', isCollapsed ? 'flex' : 'none', 'important');
+                    } else {
+                        // Mobile: always show toggle button
+                        toggleBtn.style.setProperty('display', 'flex', 'important');
+                    }
+                } catch (err) {
+                    console.error('Resize handler error:', err);
                 }
             });
             
             // Keyboard shortcuts
             document.addEventListener('keydown', (e) => {
-                // Ctrl/Cmd + S: Save
-                if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-                    e.preventDefault();
-                    if (!document.getElementById('saveBtn')?.disabled) {
-                        saveToFile();
-                    }
-                }
-                
-                // Ctrl/Cmd + N: New prompt
-                if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
-                    e.preventDefault();
-                    if (!document.getElementById('promptModal')?.classList.contains('active')) {
-                        showAddModal();
-                    }
-                }
-                
-                // Escape: Close modals
-                if (e.key === 'Escape') {
-                    const activeModal = document.querySelector('.modal-overlay.active');
-                    if (activeModal && !isEditorFullscreen) {
-                        // Check if it's the prompt modal and if editor is expanded
-                        if (activeModal.id === 'promptModal') {
-                            if (isEditorExpanded) {
-                                toggleEditorExpand();
-                                return;
-                            }
-                            closeModal();
-                        } else if (activeModal.id === 'viewContentModal') {
-                            closeViewContentModal();
-                        } else if (activeModal.id === 'versionHistoryModal') {
-                            closeVersionHistoryModal();
-                        } else if (activeModal.id === 'helpModal') {
-                            closeHelpModal();
-                        } else if (activeModal.id === 'importExportModal') {
-                            closeImportExportModal();
-                        } else if (activeModal.id === 'fileHandleModal') {
-                            closeFileHandleModal();
-                        } else {
-                            activeModal.classList.remove('active');
+                try {
+                    // Ctrl/Cmd + S: Save
+                    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                        e.preventDefault();
+                        const saveBtn = document.getElementById('saveBtn');
+                        if (!saveBtn || !saveBtn.disabled) {
+                            saveToFile();
                         }
                     }
+                    
+                    // Ctrl/Cmd + N: New prompt
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+                        e.preventDefault();
+                        const promptModal = document.getElementById('promptModal');
+                        if (!promptModal || !promptModal.classList.contains('active')) {
+                            showAddModal();
+                        }
+                    }
+                    
+                    // Escape: Close modals
+                    if (e.key === 'Escape') {
+                        const activeModal = document.querySelector('.modal-overlay.active');
+                        if (activeModal && !isEditorFullscreen) {
+                            e.preventDefault();
+                            // Check if it's the prompt modal and if editor is expanded
+                            if (activeModal.id === 'promptModal') {
+                                if (isEditorExpanded) {
+                                    toggleEditorExpand();
+                                    return;
+                                }
+                                closeModal();
+                            } else if (activeModal.id === 'viewContentModal') {
+                                closeViewContentModal();
+                            } else if (activeModal.id === 'versionHistoryModal') {
+                                closeVersionHistoryModal();
+                            } else if (activeModal.id === 'helpModal') {
+                                closeHelpModal();
+                            } else if (activeModal.id === 'importExportModal') {
+                                closeImportExportModal();
+                            } else if (activeModal.id === 'fileHandleModal') {
+                                closeFileHandleModal();
+                            } else if (activeModal.id === 'addCategoryModal') {
+                                closeAddCategoryModal();
+                            } else if (activeModal.id === 'addTagModal') {
+                                closeAddTagModal();
+                            } else {
+                                activeModal.classList.remove('active');
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.error('Keyboard shortcut error:', err);
                 }
             });
         });
@@ -2572,30 +2603,25 @@
                 const content = await file.text();
                 
                 try {
-                    const data = JSON.parse(content);
+                    const rawData = JSON.parse(content);
                     
                     // Support both old format (array) and new format (object with metadata)
-                    if (Array.isArray(data)) {
-                        prompts = data.map(p => ({
-                            ...p,
-                            tags: Array.isArray(p.tags) ? p.tags.map(String) : []
-                        }));
-                        customCategories = {};
-                        customTags = new Set();
-                        featuredPrompts = new Set();
-                        promptVersions = {};
-                    } else if (data && typeof data === 'object' && Array.isArray(data.prompts)) {
-                        prompts = data.prompts.map(p => ({
-                            ...p,
-                            tags: Array.isArray(p.tags) ? p.tags.map(String) : []
-                        }));
-                        customCategories = data.customCategories || {};
-                        customTags = new Set((data.customTags || []).map(String));
-                        featuredPrompts = new Set((data.featuredPrompts || []).map(String));
-                        promptVersions = data.promptVersions || {};
+                    let dataToSanitize;
+                    if (Array.isArray(rawData)) {
+                        dataToSanitize = { prompts: rawData };
+                    } else if (rawData && typeof rawData === 'object' && Array.isArray(rawData.prompts)) {
+                        dataToSanitize = rawData;
                     } else {
                         throw new Error('Invalid format');
                     }
+                    
+                    // Sanitize data
+                    const sanitized = sanitizePromptData(dataToSanitize);
+                    prompts = sanitized.prompts;
+                    customCategories = sanitized.customCategories;
+                    customTags = sanitized.customTags;
+                    featuredPrompts = sanitized.featuredPrompts;
+                    promptVersions = sanitized.promptVersions;
                     
                     hasUnsavedChanges = false;
                     currentCategory = 'all';
@@ -2621,17 +2647,17 @@
             }
         }
                     
-                    // Store file reference for saving (using File System Access API if available)
-                    // Note: We can't get a writable handle from a file input, so we'll need to use "Save As" next time
-                    currentFileHandle = null;
-                    
-                    hasUnsavedChanges = false;
-                    currentCategory = 'all';
-                    currentTag = null;
-                    renderCategories();
         // Save to File - using File System Access API
         // @param {boolean} silent - if true, don't show toast on success (used when called from savePrompt)
         async function saveToFile(silent = false) {
+            // Validate data before saving
+            const validationErrors = validatePromptData({ prompts });
+            if (validationErrors.length > 0) {
+                console.error('Data validation errors:', validationErrors);
+                showToast('数据验证失败，请检查控制台', 'error');
+                return;
+            }
+            
             const exportData = {
                 prompts: prompts,
                 customCategories: customCategories,
@@ -2641,7 +2667,14 @@
                 exportDate: new Date().toISOString()
             };
             
-            const data = JSON.stringify(exportData, null, 2);
+            let data;
+            try {
+                data = JSON.stringify(exportData, null, 2);
+            } catch (e) {
+                console.error('JSON serialization failed:', e);
+                showToast('数据序列化失败: ' + e.message, 'error');
+                return;
+            }
             
             // Write directly to file using File System Access API
             if (!currentFileHandle) {
@@ -2663,6 +2696,12 @@
             } catch (e) {
                 console.error('Save failed:', e);
                 showToast('保存失败: ' + e.message, 'error');
+                
+                // If permission denied, reset file handle
+                if (e.name === 'NotAllowedError' || e.name === 'SecurityError') {
+                    currentFileHandle = null;
+                    showToast('文件权限已失效，请重新选择文件', 'error');
+                }
             }
         }
 
@@ -2750,16 +2789,15 @@
             try {
                 const saved = localStorage.getItem('promptToolsData');
                 if (saved) {
-                    const data = JSON.parse(saved);
-                    if (data && typeof data === 'object' && Array.isArray(data.prompts)) {
-                        prompts = data.prompts.map(p => ({
-                            ...p,
-                            tags: Array.isArray(p.tags) ? p.tags.map(String) : []
-                        }));
-                        customCategories = data.customCategories || {};
-                        customTags = new Set((data.customTags || []).map(String));
-                        featuredPrompts = new Set((data.featuredPrompts || []).map(String));
-                        promptVersions = data.promptVersions || {};
+                    const rawData = JSON.parse(saved);
+                    if (rawData && typeof rawData === 'object' && Array.isArray(rawData.prompts)) {
+                        // Sanitize data
+                        const sanitized = sanitizePromptData(rawData);
+                        prompts = sanitized.prompts;
+                        customCategories = sanitized.customCategories;
+                        customTags = sanitized.customTags;
+                        featuredPrompts = sanitized.featuredPrompts;
+                        promptVersions = sanitized.promptVersions;
                         
                         // Show a toast indicating data was restored
                         if (prompts.length > 0) {
@@ -2785,11 +2823,112 @@
         // This function is kept for compatibility but does nothing
         function toggleAutoSave() {
             // Auto-save to localStorage is always enabled
+            showToast('自动保存已启用（浏览器存储）');
+        }
+        
+        // Validate prompt data structure
+        function validatePromptData(data) {
+            const errors = [];
+            
+            if (!data || typeof data !== 'object') {
+                errors.push('数据格式无效');
+                return errors;
+            }
+            
+            if (!Array.isArray(data.prompts)) {
+                errors.push('提示词数据必须是数组');
+                return errors;
+            }
+            
+            data.prompts.forEach((p, index) => {
+                if (!p.id) errors.push(`第 ${index + 1} 个提示词缺少 ID`);
+                if (!p.title) errors.push(`第 ${index + 1} 个提示词缺少标题`);
+                if (!p.content) errors.push(`第 ${index + 1} 个提示词缺少内容`);
+                if (!p.category) errors.push(`第 ${index + 1} 个提示词缺少分类`);
+            });
+            
+            return errors;
+        }
+        
+        // Sanitize prompt data to prevent XSS and ensure data integrity
+        function sanitizePromptData(data) {
+            if (!data || typeof data !== 'object') {
+                return { prompts: [], customCategories: {}, customTags: new Set(), featuredPrompts: new Set(), promptVersions: {} };
+            }
+            
+            const sanitized = {
+                prompts: [],
+                customCategories: {},
+                customTags: new Set(),
+                featuredPrompts: new Set(),
+                promptVersions: {}
+            };
+            
+            // Sanitize prompts
+            if (Array.isArray(data.prompts)) {
+                sanitized.prompts = data.prompts.map(p => ({
+                    id: String(p.id || generateId()).substring(0, 100),
+                    title: String(p.title || '未命名').substring(0, 200),
+                    category: String(p.category || 'other').substring(0, 50),
+                    content: String(p.content || '').substring(0, 50000),
+                    notes: p.notes ? String(p.notes).substring(0, 5000) : '',
+                    version: p.version ? String(p.version).substring(0, 20) : '',
+                    tags: Array.isArray(p.tags) ? p.tags.map(t => String(t).substring(0, 30)) : [],
+                    createdAt: typeof p.createdAt === 'number' ? p.createdAt : Date.now(),
+                    updatedAt: typeof p.updatedAt === 'number' ? p.updatedAt : Date.now()
+                }));
+            }
+            
+            // Sanitize custom categories
+            if (data.customCategories && typeof data.customCategories === 'object') {
+                Object.entries(data.customCategories).forEach(([key, value]) => {
+                    const safeKey = String(key).substring(0, 100);
+                    const safeValue = String(value).substring(0, 50);
+                    sanitized.customCategories[safeKey] = safeValue;
+                });
+            }
+            
+            // Sanitize custom tags
+            if (Array.isArray(data.customTags)) {
+                data.customTags.forEach(tag => {
+                    sanitized.customTags.add(String(tag).substring(0, 30));
+                });
+            }
+            
+            // Sanitize featured prompts
+            if (Array.isArray(data.featuredPrompts)) {
+                data.featuredPrompts.forEach(id => {
+                    sanitized.featuredPrompts.add(String(id).substring(0, 100));
+                });
+            }
+            
+            // Sanitize versions
+            if (data.promptVersions && typeof data.promptVersions === 'object') {
+                Object.entries(data.promptVersions).forEach(([key, versions]) => {
+                    const safeKey = String(key).substring(0, 100);
+                    if (Array.isArray(versions)) {
+                        sanitized.promptVersions[safeKey] = versions.slice(0, MAX_VERSIONS).map(v => ({
+                            title: String(v.title || '').substring(0, 200),
+                            category: String(v.category || '').substring(0, 50),
+                            content: String(v.content || '').substring(0, 50000),
+                            notes: v.notes ? String(v.notes).substring(0, 5000) : '',
+                            version: v.version ? String(v.version).substring(0, 20) : '',
+                            tags: Array.isArray(v.tags) ? v.tags.map(t => String(t).substring(0, 30)) : [],
+                            timestamp: typeof v.timestamp === 'number' ? v.timestamp : Date.now(),
+                            versionNumber: typeof v.versionNumber === 'number' ? v.versionNumber : 1
+                        }));
+                    }
+                });
+            }
+            
+            return sanitized;
         }
 
         // Schedule auto-save to localStorage
         function scheduleAutoSave() {
-            clearTimeout(autoSaveInterval);
+            if (autoSaveInterval) {
+                clearTimeout(autoSaveInterval);
+            }
             autoSaveInterval = setTimeout(() => {
                 if (hasUnsavedChanges) {
                     saveToLocalStorage();
@@ -2959,7 +3098,7 @@
             const versionBadge = prompt.version ? `<span style="background: var(--accent-bg); color: var(--accent); padding: 0.1rem 0.4rem; border-radius: 1rem; font-size: 0.7rem; margin-left: 0.5rem;">${escapeHtml(prompt.version)}</span>` : '';
             
             return `
-                <div class="prompt-card" data-id="${prompt.id}">
+                <div class="prompt-card" data-id="${escapeHtml(prompt.id)}">
                     <div class="prompt-header">
                         <div>
                             <div class="prompt-title">${notesIcon}${escapeHtml(prompt.title)}${versionBadge}</div>
@@ -3039,7 +3178,21 @@
             document.querySelectorAll('.category-item').forEach(item => {
                 item.classList.remove('active');
             });
-            event.currentTarget.classList.add('active');
+            
+            // Try to find and highlight the clicked category item
+            // If called programmatically without event, just update the UI
+            if (typeof event !== 'undefined' && event && event.currentTarget) {
+                event.currentTarget.classList.add('active');
+            } else {
+                // Find the category item by onclick attribute and highlight it
+                const categoryItems = document.querySelectorAll('.category-item');
+                categoryItems.forEach(item => {
+                    const onclickAttr = item.getAttribute('onclick');
+                    if (onclickAttr && onclickAttr.includes(`'${category}'`)) {
+                        item.classList.add('active');
+                    }
+                });
+            }
             
             document.querySelectorAll('.tag').forEach(tag => {
                 tag.classList.remove('active');
@@ -3139,8 +3292,20 @@
             const container = document.getElementById('promptsContainer');
             const buttons = document.querySelectorAll('.view-btn');
             
-            buttons.forEach(btn => btn.classList.remove('active'));
-            event.currentTarget.classList.add('active');
+            buttons.forEach(btn => {
+                btn.classList.remove('active');
+                // Match by onclick attribute if event is not available
+                const onclickAttr = btn.getAttribute('onclick');
+                if (onclickAttr && onclickAttr.includes(`'${view}'`)) {
+                    btn.classList.add('active');
+                }
+            });
+            
+            // If event is available, use it (for direct clicks)
+            if (typeof event !== 'undefined' && event && event.currentTarget) {
+                buttons.forEach(btn => btn.classList.remove('active'));
+                event.currentTarget.classList.add('active');
+            }
             
             container.className = view === 'grid' ? 'prompts-grid' : 'prompts-list';
             renderPrompts();
@@ -3258,16 +3423,29 @@
         // Close Add Category Modal
         function closeAddCategoryModal() {
             document.getElementById('addCategoryModal').classList.remove('active');
+            // Clear input
+            const input = document.getElementById('newCategoryName');
+            if (input) input.value = '';
         }
 
         // Add Category
         function addCategory() {
             const nameInput = document.getElementById('newCategoryName');
+            if (!nameInput) {
+                showToast('表单元素缺失', 'error');
+                return;
+            }
+            
             const name = nameInput.value.trim();
-            console.log('Adding category:', name); // Debug
             
             if (!name) {
                 showToast('请输入分类名称', 'error');
+                return;
+            }
+            
+            // Validate category name length
+            if (name.length > 50) {
+                showToast('分类名称不能超过 50 字符', 'error');
                 return;
             }
             
@@ -3292,52 +3470,84 @@
 
         // Delete Category
         async function deleteCategory(key) {
-            if (!confirm(`确定要删除分类 "${customCategories[key]}" 吗？该分类下的提示词将被移到"其他"分类。`)) return;
-            
-            // Move prompts to 'other'
-            prompts.forEach(p => {
-                if (p.category === key) {
-                    p.category = 'other';
-                }
-            });
-            
-            delete customCategories[key];
-            
-            if (currentCategory === key) {
-                currentCategory = 'all';
+            if (!customCategories[key]) {
+                showToast('分类不存在', 'error');
+                return;
             }
             
-            renderCategories();
-            renderPrompts();
-            updateStats();
-            markUnsaved();
-            showToast('分类已删除');
+            if (!confirm(`确定要删除分类 "${customCategories[key]}" 吗？该分类下的提示词将被移到"其他"分类。`)) return;
+            
+            const originalPrompts = JSON.parse(JSON.stringify(prompts));
+            const originalCategories = { ...customCategories };
+            
+            try {
+                // Move prompts to 'other'
+                prompts.forEach(p => {
+                    if (p.category === key) {
+                        p.category = 'other';
+                    }
+                });
+                
+                delete customCategories[key];
+                
+                if (currentCategory === key) {
+                    currentCategory = 'all';
+                }
+                
+                renderCategories();
+                renderPrompts();
+                updateStats();
+                markUnsaved();
+                showToast('分类已删除');
+            } catch (e) {
+                // Rollback on error
+                prompts = originalPrompts;
+                customCategories = originalCategories;
+                console.error('Delete category failed:', e);
+                showToast('删除分类失败: ' + e.message, 'error');
+            }
         }
         
         // Delete Default Category
         async function deleteDefaultCategory(key) {
             const categoryName = defaultCategoryNames[key];
-            if (!confirm(`确定要删除默认分类 "${categoryName}" 吗？该分类下的提示词将被移到"其他"分类。`)) return;
-            
-            // Move prompts to 'other'
-            prompts.forEach(p => {
-                if (p.category === key) {
-                    p.category = 'other';
-                }
-            });
-            
-            // Add to hidden default categories (store in customCategories with special prefix)
-            customCategories['_deleted_' + key] = categoryName;
-            
-            if (currentCategory === key) {
-                currentCategory = 'all';
+            if (!categoryName) {
+                showToast('分类不存在', 'error');
+                return;
             }
             
-            renderCategories();
-            renderPrompts();
-            updateStats();
-            markUnsaved();
-            showToast('分类已删除');
+            if (!confirm(`确定要删除默认分类 "${categoryName}" 吗？该分类下的提示词将被移到"其他"分类。`)) return;
+            
+            const originalPrompts = JSON.parse(JSON.stringify(prompts));
+            const originalCategories = { ...customCategories };
+            
+            try {
+                // Move prompts to 'other'
+                prompts.forEach(p => {
+                    if (p.category === key) {
+                        p.category = 'other';
+                    }
+                });
+                
+                // Add to hidden default categories (store in customCategories with special prefix)
+                customCategories['_deleted_' + key] = categoryName;
+                
+                if (currentCategory === key) {
+                    currentCategory = 'all';
+                }
+                
+                renderCategories();
+                renderPrompts();
+                updateStats();
+                markUnsaved();
+                showToast('分类已删除');
+            } catch (e) {
+                // Rollback on error
+                prompts = originalPrompts;
+                customCategories = originalCategories;
+                console.error('Delete default category failed:', e);
+                showToast('删除分类失败: ' + e.message, 'error');
+            }
         }
 
         // Show Add Tag Modal
@@ -3349,13 +3559,28 @@
         // Close Add Tag Modal
         function closeAddTagModal() {
             document.getElementById('addTagModal').classList.remove('active');
+            // Clear input
+            const input = document.getElementById('newTagName');
+            if (input) input.value = '';
         }
 
         // Add Tag
         async function addTag() {
-            const name = document.getElementById('newTagName').value.trim();
+            const nameInput = document.getElementById('newTagName');
+            if (!nameInput) {
+                showToast('表单元素缺失', 'error');
+                return;
+            }
+            
+            const name = nameInput.value.trim();
             if (!name) {
                 showToast('请输入标签名称', 'error');
+                return;
+            }
+            
+            // Validate tag name length
+            if (name.length > 30) {
+                showToast('标签名称不能超过 30 字符', 'error');
                 return;
             }
             
@@ -3380,26 +3605,44 @@
         
         // Delete Tag
         async function deleteTag(tagName) {
+            if (!tagName) {
+                showToast('标签名称无效', 'error');
+                return;
+            }
+            
             if (!confirm(`确定要删除标签 "${tagName}" 吗？`)) return;
             
             // Ensure string comparison
             const tagNameStr = String(tagName);
-            customTags.delete(tagNameStr);
+            const originalPrompts = JSON.parse(JSON.stringify(prompts));
+            const originalTags = new Set(customTags);
             
-            // Remove tag from all prompts
-            prompts.forEach(p => {
-                p.tags = p.tags.filter(t => String(t) !== tagNameStr);
-            });
-            
-            if (currentTag === tagNameStr) {
-                currentTag = null;
+            try {
+                customTags.delete(tagNameStr);
+                
+                // Remove tag from all prompts
+                prompts.forEach(p => {
+                    if (Array.isArray(p.tags)) {
+                        p.tags = p.tags.filter(t => String(t) !== tagNameStr);
+                    }
+                });
+                
+                if (currentTag === tagNameStr) {
+                    currentTag = null;
+                }
+                
+                renderTags();
+                renderPrompts();
+                updateStats();
+                markUnsaved();
+                showToast('标签已删除');
+            } catch (e) {
+                // Rollback on error
+                prompts = originalPrompts;
+                customTags = originalTags;
+                console.error('Delete tag failed:', e);
+                showToast('删除标签失败: ' + e.message, 'error');
             }
-            
-            renderTags();
-            renderPrompts();
-            updateStats();
-            markUnsaved();
-            showToast('标签已删除');
         }
 
         // Selected tags for the current prompt
@@ -3565,6 +3808,16 @@
             // Initialize tag input
             setTimeout(initTagInput, 0);
             
+            // Add dirty tracking to form elements
+            setTimeout(() => {
+                const formElements = document.querySelectorAll('#promptForm input, #promptForm textarea, #promptForm select');
+                formElements.forEach(el => {
+                    el.addEventListener('input', markFormDirty);
+                    el.addEventListener('change', markFormDirty);
+                });
+            }, 0);
+            
+            resetFormDirty();
             document.getElementById('promptModal').classList.add('active');
         }
 
@@ -3589,21 +3842,56 @@
             // Initialize tag input
             setTimeout(initTagInput, 0);
             
+            // Add dirty tracking to form elements
+            setTimeout(() => {
+                const formElements = document.querySelectorAll('#promptForm input, #promptForm textarea, #promptForm select');
+                formElements.forEach(el => {
+                    el.addEventListener('input', markFormDirty);
+                    el.addEventListener('change', markFormDirty);
+                });
+            }, 0);
+            
+            resetFormDirty();
             detectVariables();
             document.getElementById('promptModal').classList.add('active');
         }
 
         // Save Prompt
         async function savePrompt() {
-            const id = document.getElementById('promptId').value;
-            const title = document.getElementById('promptTitle').value.trim();
-            const category = document.getElementById('promptCategory').value;
-            const content = document.getElementById('promptContent').value.trim();
-            const notes = document.getElementById('promptNotes').value.trim();
-            const version = document.getElementById('promptVersion').value.trim();
+            const idEl = document.getElementById('promptId');
+            const titleEl = document.getElementById('promptTitle');
+            const categoryEl = document.getElementById('promptCategory');
+            const contentEl = document.getElementById('promptContent');
+            const notesEl = document.getElementById('promptNotes');
+            const versionEl = document.getElementById('promptVersion');
+            
+            // Check if all required elements exist
+            if (!titleEl || !contentEl || !categoryEl) {
+                showToast('表单元素缺失，请刷新页面重试', 'error');
+                return;
+            }
+            
+            const id = idEl ? idEl.value : '';
+            const title = titleEl.value.trim();
+            const category = categoryEl.value;
+            const content = contentEl.value.trim();
+            const notes = notesEl ? notesEl.value.trim() : '';
+            const version = versionEl ? versionEl.value.trim() : '';
             
             if (!title || !content) {
                 showToast('请填写标题和内容', 'error');
+                return;
+            }
+            
+            // Validate title length
+            if (title.length > 200) {
+                showToast('标题长度不能超过 200 字符', 'error');
+                return;
+            }
+            
+            // Validate content length (reasonable limit)
+            if (content.length > 50000) {
+                showToast('内容长度不能超过 50000 字符', 'error');
                 return;
             }
             
@@ -3683,15 +3971,30 @@
 
         // Delete Prompt
         async function deletePrompt(id) {
-            if (!confirm('确定要删除这个提示词吗？')) return;
+            const prompt = prompts.find(p => p.id === id);
+            if (!prompt) {
+                showToast('提示词不存在', 'error');
+                return;
+            }
             
+            if (!confirm(`确定要删除提示词 "${prompt.title}" 吗？`)) return;
+            
+            const originalPrompts = [...prompts];
             prompts = prompts.filter(p => p.id !== id);
             deletePromptVersions(id);
-            markUnsaved();
-            renderPrompts();
-            updateStats();
-            renderTags();
-            showToast('提示词已删除');
+            
+            try {
+                markUnsaved();
+                renderPrompts();
+                updateStats();
+                renderTags();
+                showToast('提示词已删除');
+            } catch (e) {
+                // Rollback on error
+                prompts = originalPrompts;
+                console.error('Delete failed:', e);
+                showToast('删除失败: ' + e.message, 'error');
+            }
         }
 
         // Show Version History
@@ -3851,38 +4154,111 @@
 
         // Toggle Featured
         async function toggleFeatured(id) {
-            if (featuredPrompts.has(id)) {
-                featuredPrompts.delete(id);
-                showToast('已取消精选');
-            } else {
-                featuredPrompts.add(id);
-                showToast('已设为精选');
+            const prompt = prompts.find(p => p.id === id);
+            if (!prompt) {
+                showToast('提示词不存在', 'error');
+                return;
             }
             
-            markUnsaved();
-            renderPrompts();
-            updateCategoryCounts();
+            try {
+                if (featuredPrompts.has(id)) {
+                    featuredPrompts.delete(id);
+                    showToast('已取消精选');
+                } else {
+                    featuredPrompts.add(id);
+                    showToast('已设为精选');
+                }
+                
+                markUnsaved();
+                renderPrompts();
+                updateCategoryCounts();
+            } catch (e) {
+                console.error('Toggle featured failed:', e);
+                showToast('操作失败: ' + e.message, 'error');
+            }
         }
 
         // Copy Prompt
         async function copyPrompt(id) {
             const prompt = prompts.find(p => p.id === id);
-            if (!prompt) return;
+            if (!prompt) {
+                showToast('提示词不存在', 'error');
+                return;
+            }
+            
+            if (!prompt.content) {
+                showToast('提示词内容为空', 'error');
+                return;
+            }
             
             try {
                 await navigator.clipboard.writeText(prompt.content);
                 showToast('已复制到剪贴板');
             } catch (err) {
-                showToast('复制失败', 'error');
+                console.error('Copy failed:', err);
+                showToast('复制失败: ' + (err.message || '未知错误'), 'error');
+                
+                // Fallback: try to select and copy
+                try {
+                    const textarea = document.createElement('textarea');
+                    textarea.value = prompt.content;
+                    textarea.style.position = 'fixed';
+                    textarea.style.opacity = '0';
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textarea);
+                    showToast('已复制到剪贴板');
+                } catch (fallbackErr) {
+                    showToast('复制失败，请手动复制', 'error');
+                }
             }
         }
 
+        // Track if form has been modified
+        let isFormDirty = false;
+        
+        // Mark form as dirty
+        function markFormDirty() {
+            isFormDirty = true;
+        }
+        
+        // Reset form dirty state
+        function resetFormDirty() {
+            isFormDirty = false;
+        }
+        
         // Close Modal
         function closeModal() {
+            // Check if form has unsaved changes
+            if (isFormDirty) {
+                const title = document.getElementById('promptTitle')?.value?.trim();
+                const content = document.getElementById('promptContent')?.value?.trim();
+                
+                // Only confirm if there's actual content
+                if (title || content) {
+                    if (!confirm('确定要关闭吗？未保存的更改将丢失。')) {
+                        return;
+                    }
+                }
+            }
+            
             document.getElementById('promptModal').classList.remove('active');
+            
+            // Reset form
+            const form = document.getElementById('promptForm');
+            if (form) form.reset();
+            
+            // Reset hidden fields
+            const promptId = document.getElementById('promptId');
+            if (promptId) promptId.value = '';
+            
+            // Reset tags
             currentSelectedTags = [];
+            renderSelectedTags();
             closeTagSelector();
             cleanupTagInputHandlers();
+            resetFormDirty();
             
             // Reset editor expanded state
             const editorContainer = document.querySelector('.form-group:has(.editor-toolbar)');
@@ -3903,8 +4279,11 @@
         function parseMarkdown(text) {
             if (!text) return '';
             
-            let html = text
-                // Escape HTML
+            // Convert to string and limit length
+            const safeText = String(text).substring(0, 100000);
+            
+            let html = safeText
+                // Escape HTML first
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
@@ -4090,11 +4469,18 @@
         // View prompt content in modal
         function viewPromptContent(promptId) {
             const prompt = prompts.find(p => p.id === promptId);
-            if (!prompt) return;
+            if (!prompt) {
+                showToast('提示词不存在', 'error');
+                return;
+            }
             
-            currentViewContent = prompt.content;
-            document.getElementById('viewContentTitle').textContent = prompt.title;
-            document.getElementById('contentViewer').textContent = prompt.content;
+            currentViewContent = prompt.content || '';
+            
+            const titleEl = document.getElementById('viewContentTitle');
+            const contentEl = document.getElementById('contentViewer');
+            
+            if (titleEl) titleEl.textContent = prompt.title || '无标题';
+            if (contentEl) contentEl.textContent = currentViewContent;
             
             // Show notes if exists
             const notesSection = document.getElementById('viewNotesSection');
@@ -4117,20 +4503,43 @@
 
         // Copy viewed content
         async function copyViewContent() {
-            if (!currentViewContent) return;
+            if (!currentViewContent) {
+                showToast('没有可复制的内容', 'error');
+                return;
+            }
             
             try {
                 await navigator.clipboard.writeText(currentViewContent);
                 showToast('已复制到剪贴板');
             } catch (err) {
-                showToast('复制失败', 'error');
+                console.error('Copy failed:', err);
+                showToast('复制失败: ' + (err.message || '未知错误'), 'error');
+                
+                // Fallback: try to select and copy
+                try {
+                    const textarea = document.createElement('textarea');
+                    textarea.value = currentViewContent;
+                    textarea.style.position = 'fixed';
+                    textarea.style.opacity = '0';
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textarea);
+                    showToast('已复制到剪贴板');
+                } catch (fallbackErr) {
+                    showToast('复制失败，请手动复制', 'error');
+                }
             }
         }
         
         // View prompt notes directly
         function viewPromptNotes(promptId) {
             const prompt = prompts.find(p => p.id === promptId);
-            if (!prompt || !prompt.notes) return;
+            if (!prompt) {
+                showToast('提示词不存在', 'error');
+                return;
+            }
+            if (!prompt.notes || !prompt.notes.trim()) return;
             
             // Create a modal to show notes
             const modal = document.createElement('div');
@@ -4253,8 +4662,23 @@
 
         // Import Prompts
         function importPrompts(input) {
+            if (!input || !input.files) {
+                showToast('文件输入无效', 'error');
+                return;
+            }
+            
             const file = input.files[0];
-            if (!file) return;
+            if (!file) {
+                showToast('请选择文件', 'error');
+                return;
+            }
+            
+            // Check file size (max 10MB)
+            if (file.size > 10 * 1024 * 1024) {
+                showToast('文件大小不能超过 10MB', 'error');
+                input.value = '';
+                return;
+            }
             
             const reader = new FileReader();
             reader.onload = (e) => {
@@ -4306,29 +4730,33 @@
                     });
                     
                     if (confirm(`确定要导入 ${newPrompts.length} 个提示词吗？`)) {
-                        prompts = [...prompts, ...newPrompts];
+                        // Sanitize the imported data
+                        const dataToSanitize = {
+                            prompts: newPrompts,
+                            customCategories: importedCategories,
+                            customTags: importedTags,
+                            featuredPrompts: importedFeatured.map(id => idMapping[id]).filter(Boolean),
+                            promptVersions: {}
+                        };
                         
-                        // Merge custom categories, tags, featured and versions
-                        if (importedCategories && typeof importedCategories === 'object') {
-                            Object.assign(customCategories, importedCategories);
-                        }
-                        if (Array.isArray(importedTags)) {
-                            importedTags.forEach(tag => customTags.add(String(tag)));
-                        }
-                        // Map old featured IDs to new IDs
-                        if (Array.isArray(importedFeatured)) {
-                            importedFeatured.forEach(oldId => {
-                                const newId = idMapping[oldId];
-                                if (newId) featuredPrompts.add(newId);
-                            });
-                        }
-                        // Map old version IDs to new IDs
+                        // Map version IDs
                         if (importedVersions && typeof importedVersions === 'object') {
                             Object.entries(importedVersions).forEach(([oldId, versions]) => {
                                 const newId = idMapping[oldId];
-                                if (newId) promptVersions[newId] = versions;
+                                if (newId) {
+                                    dataToSanitize.promptVersions[newId] = versions;
+                                }
                             });
                         }
+                        
+                        const sanitized = sanitizePromptData(dataToSanitize);
+                        prompts = [...prompts, ...sanitized.prompts];
+                        
+                        // Merge custom categories, tags, featured and versions
+                        Object.assign(customCategories, sanitized.customCategories);
+                        sanitized.customTags.forEach(tag => customTags.add(tag));
+                        sanitized.featuredPrompts.forEach(id => featuredPrompts.add(id));
+                        Object.assign(promptVersions, sanitized.promptVersions);
                         
                         markUnsaved();
                         renderCategories();
@@ -4344,7 +4772,20 @@
                 closeImportExportModal();
                 input.value = '';
             };
-            reader.readAsText(file);
+            
+            reader.onerror = () => {
+                showToast('文件读取失败', 'error');
+                closeImportExportModal();
+                input.value = '';
+            };
+            
+            try {
+                reader.readAsText(file);
+            } catch (e) {
+                showToast('读取文件失败: ' + e.message, 'error');
+                closeImportExportModal();
+                input.value = '';
+            }
         }
 
         // Update Stats
@@ -4430,8 +4871,11 @@
 
         // Escape HTML
         function escapeHtml(text) {
+            if (text === null || text === undefined) {
+                return '';
+            }
             const div = document.createElement('div');
-            div.textContent = text;
+            div.textContent = String(text);
             return div.innerHTML;
         }
 

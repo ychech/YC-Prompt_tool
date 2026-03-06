@@ -1,5 +1,5 @@
 // YC Prompt Tool v2 - Database Version
-// Vue 3 style vanilla JS implementation
+// Vue 3 style vanilla JS implementation with real API integration
 
 const API_BASE = '/api';
 
@@ -20,13 +20,139 @@ const state = {
     currentCategory: 'all',
     currentTag: null,
     searchQuery: '',
-    isDarkMode: false
+    isDarkMode: false,
+    isLoading: false
 };
 
 // DOM Elements
 let appEl;
 
-// Initialize
+// ============ API Interceptors ============
+
+/**
+ * Get auth headers with token from localStorage
+ */
+function getAuthHeaders() {
+    const token = localStorage.getItem('auth_token');
+    const headers = {
+        'Content-Type': 'application/json'
+    };
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+    return headers;
+}
+
+/**
+ * Generic API request with auth, loading state, and error handling
+ */
+async function apiRequest(url, options = {}) {
+    // Show loading spinner
+    setLoading(true);
+    
+    try {
+        const headers = getAuthHeaders();
+        
+        const response = await fetch(url, {
+            ...options,
+            headers: {
+                ...headers,
+                ...options.headers
+            }
+        });
+        
+        // Handle auth errors
+        if (response.status === 401) {
+            localStorage.removeItem('auth_token');
+            state.user = null;
+            renderLogin();
+            throw new Error('登录已过期，请重新登录');
+        }
+        
+        // Handle other errors
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `请求失败: ${response.status}`);
+        }
+        
+        // Parse JSON response
+        const data = await response.json();
+        return data;
+        
+    } catch (error) {
+        showToast(error.message, 'error');
+        throw error;
+    } finally {
+        // Hide loading spinner
+        setLoading(false);
+    }
+}
+
+/**
+ * Set loading state
+ */
+function setLoading(isLoading) {
+    state.isLoading = isLoading;
+    const spinner = document.getElementById('loadingSpinner');
+    if (spinner) {
+        spinner.style.display = isLoading ? 'flex' : 'none';
+    }
+}
+
+// ============ API Functions ============
+
+/**
+ * GET /api/prompts - List all prompts
+ */
+async function fetchPrompts() {
+    return apiRequest(`${API_BASE}/prompts`);
+}
+
+/**
+ * POST /api/prompts - Create new prompt
+ */
+async function createPrompt(promptData) {
+    return apiRequest(`${API_BASE}/prompts`, {
+        method: 'POST',
+        body: JSON.stringify(promptData)
+    });
+}
+
+/**
+ * PUT /api/prompts/:id - Update prompt
+ */
+async function updatePrompt(id, promptData) {
+    return apiRequest(`${API_BASE}/prompts/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(promptData)
+    });
+}
+
+/**
+ * DELETE /api/prompts/:id - Delete prompt
+ */
+async function deletePrompt(id) {
+    return apiRequest(`${API_BASE}/prompts/${id}`, {
+        method: 'DELETE'
+    });
+}
+
+/**
+ * GET /api/categories - List categories
+ */
+async function fetchCategories() {
+    return apiRequest(`${API_BASE}/categories`);
+}
+
+/**
+ * GET /api/tags - List tags
+ */
+async function fetchTags() {
+    return apiRequest(`${API_BASE}/tags`);
+}
+
+// ============ Initialize ============
+
 function init() {
     appEl = document.getElementById('app');
     
@@ -38,6 +164,8 @@ function init() {
         renderLogin();
     }
 }
+
+// ============ Render Functions ============
 
 // Render Login Page
 function renderLogin() {
@@ -66,7 +194,26 @@ function renderLogin() {
                 </div>
             </div>
         </div>
+        ${renderLoadingSpinner()}
+        ${renderToastContainer()}
     `;
+}
+
+// Render Loading Spinner
+function renderLoadingSpinner() {
+    return `
+        <div id="loadingSpinner" class="loading-spinner" style="display: none;">
+            <div class="spinner-overlay">
+                <div class="spinner"></div>
+                <span>加载中...</span>
+            </div>
+        </div>
+    `;
+}
+
+// Render Toast Container
+function renderToastContainer() {
+    return `<div class="toast-container" id="toastContainer"></div>`;
 }
 
 // Render Main App
@@ -156,7 +303,8 @@ function renderApp() {
         </div>
         
         ${renderModal()}
-        <div class="toast-container" id="toastContainer"></div>
+        ${renderLoadingSpinner()}
+        ${renderToastContainer()}
     `;
 }
 
@@ -196,6 +344,7 @@ function renderModal() {
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+                    <button class="btn btn-danger" id="deleteBtn" onclick="handleDelete()" style="display: none; margin-right: auto;">删除</button>
                     <button class="btn btn-primary" onclick="savePrompt()">保存</button>
                 </div>
             </div>
@@ -203,7 +352,8 @@ function renderModal() {
     `;
 }
 
-// Filter Prompts
+// ============ Filter Functions ============
+
 function filterPrompts() {
     return state.prompts.filter(p => {
         if (state.currentCategory !== 'all' && p.category !== state.currentCategory) return false;
@@ -217,7 +367,8 @@ function filterPrompts() {
     });
 }
 
-// Actions
+// ============ Action Functions ============
+
 function setCategory(id) {
     state.currentCategory = id;
     state.currentTag = null;
@@ -245,6 +396,7 @@ function showAddModal() {
     document.getElementById('promptContent').value = '';
     document.getElementById('promptTags').value = '';
     document.getElementById('modalTitle').textContent = '新建提示词';
+    document.getElementById('deleteBtn').style.display = 'none';
     document.getElementById('promptModal').classList.add('active');
 }
 
@@ -258,6 +410,7 @@ function editPrompt(id) {
     document.getElementById('promptCategory').value = prompt.category;
     document.getElementById('promptTags').value = prompt.tags?.join(', ') || '';
     document.getElementById('modalTitle').textContent = '编辑提示词';
+    document.getElementById('deleteBtn').style.display = 'inline-block';
     document.getElementById('promptModal').classList.add('active');
 }
 
@@ -283,62 +436,106 @@ async function savePrompt() {
     
     try {
         if (id) {
-            // Update
-            await fetch(`${API_BASE}/prompts/${id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(promptData)
-            });
+            // Update existing prompt
+            await updatePrompt(id, promptData);
             showToast('提示词已更新');
         } else {
-            // Create
-            await fetch(`${API_BASE}/prompts`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(promptData)
-            });
+            // Create new prompt
+            await createPrompt(promptData);
             showToast('提示词已创建');
         }
         
         closeModal();
         await loadPrompts();
-    } catch (e) {
-        showToast('保存失败: ' + e.message, 'error');
+    } catch (error) {
+        // Error already handled by apiRequest
+        console.error('Save prompt failed:', error);
     }
 }
 
-// API Functions
+async function handleDelete() {
+    const id = document.getElementById('promptId').value;
+    if (!id) return;
+    
+    if (!confirm('确定要删除这个提示词吗？')) {
+        return;
+    }
+    
+    try {
+        await deletePrompt(id);
+        showToast('提示词已删除');
+        closeModal();
+        await loadPrompts();
+    } catch (error) {
+        console.error('Delete prompt failed:', error);
+    }
+}
+
+// ============ Data Loading Functions ============
+
 async function loadUser() {
-    // Mock user for now
+    // For now, use mock user data
+    // In production, this should fetch from /api/user
     state.user = {
         username: 'Demo User',
         avatar: 'https://github.com/github.png'
     };
-    await loadPrompts();
+    
+    // Load all data from real API
+    await Promise.all([
+        loadPrompts(),
+        loadCategories(),
+        loadTags()
+    ]);
+    
     renderApp();
 }
 
 async function loadPrompts() {
     try {
-        // Mock data for now
-        state.prompts = [
-            {
-                id: '1',
-                title: '示例提示词 1',
-                content: '这是一个示例提示词的内容...',
-                category: 'writing',
-                tags: ['示例', '写作'],
-                updated_at: new Date().toISOString()
-            }
-        ];
-        state.tags = ['示例', '写作', '编程'];
-    } catch (e) {
-        showToast('加载失败: ' + e.message, 'error');
+        const prompts = await fetchPrompts();
+        state.prompts = prompts || [];
+    } catch (error) {
+        state.prompts = [];
+        console.error('Failed to load prompts:', error);
     }
 }
 
+async function loadCategories() {
+    try {
+        const categories = await fetchCategories();
+        if (categories && categories.length > 0) {
+            // Merge with default categories, keeping 'all' at the beginning
+            const apiCategories = categories.map(c => ({
+                id: c.id,
+                name: c.name,
+                icon: c.icon || 'fa-folder'
+            }));
+            state.categories = [
+                state.categories[0], // Keep 'all'
+                ...apiCategories
+            ];
+        }
+    } catch (error) {
+        console.error('Failed to load categories:', error);
+        // Keep default categories on error
+    }
+}
+
+async function loadTags() {
+    try {
+        const tags = await fetchTags();
+        state.tags = tags || [];
+    } catch (error) {
+        state.tags = [];
+        console.error('Failed to load tags:', error);
+    }
+}
+
+// ============ Auth Functions ============
+
 function loginWithGitHub() {
-    // Mock login
+    // Mock login - in production, redirect to GitHub OAuth
     localStorage.setItem('auth_token', 'mock_token');
     loadUser();
 }
@@ -346,17 +543,31 @@ function loginWithGitHub() {
 function logout() {
     localStorage.removeItem('auth_token');
     state.user = null;
+    state.prompts = [];
     renderLogin();
 }
 
-// Utilities
+// ============ Utility Functions ============
+
 function showToast(message, type = 'success') {
     const container = document.getElementById('toastContainer');
+    if (!container) return;
+    
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     toast.textContent = message;
     container.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
+    
+    // Animate in
+    requestAnimationFrame(() => {
+        toast.classList.add('show');
+    });
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
 }
 
 function escapeHtml(text) {
@@ -370,11 +581,104 @@ function getCategoryName(id) {
 }
 
 function formatDate(dateStr) {
+    if (!dateStr) return '-';
     const date = new Date(dateStr);
     return date.toLocaleDateString('zh-CN');
 }
 
-// Start
+// ============ Auto Save ============
+
+let autoSaveTimer = null;
+let lastSavedContent = '';
+
+/**
+ * Enable auto-save for a textarea
+ */
+function enableAutoSave(textareaId, saveCallback, delay = 3000) {
+    const textarea = document.getElementById(textareaId);
+    if (!textarea) return;
+    
+    // Store initial content
+    lastSavedContent = textarea.value;
+    
+    textarea.addEventListener('input', () => {
+        // Clear existing timer
+        if (autoSaveTimer) {
+            clearTimeout(autoSaveTimer);
+        }
+        
+        // Show saving indicator
+        showSaveStatus('saving');
+        
+        // Set new timer
+        autoSaveTimer = setTimeout(async () => {
+            const currentContent = textarea.value;
+            
+            // Only save if content changed
+            if (currentContent !== lastSavedContent) {
+                try {
+                    await saveCallback(currentContent);
+                    lastSavedContent = currentContent;
+                    showSaveStatus('saved');
+                } catch (e) {
+                    showSaveStatus('error');
+                }
+            }
+        }, delay);
+    });
+    
+    // Save on blur
+    textarea.addEventListener('blur', async () => {
+        if (autoSaveTimer) {
+            clearTimeout(autoSaveTimer);
+        }
+        
+        const currentContent = textarea.value;
+        if (currentContent !== lastSavedContent) {
+            try {
+                await saveCallback(currentContent);
+                lastSavedContent = currentContent;
+                showSaveStatus('saved');
+            } catch (e) {
+                showSaveStatus('error');
+            }
+        }
+    });
+}
+
+/**
+ * Show save status indicator
+ */
+function showSaveStatus(status) {
+    const indicator = document.getElementById('saveStatus');
+    if (!indicator) return;
+    
+    const icons = {
+        saving: '<i class="fas fa-spinner fa-spin"></i>',
+        saved: '<i class="fas fa-check"></i>',
+        error: '<i class="fas fa-exclamation-circle"></i>'
+    };
+    
+    const texts = {
+        saving: '保存中...',
+        saved: '已保存',
+        error: '保存失败'
+    };
+    
+    indicator.innerHTML = `${icons[status]} ${texts[status]}`;
+    indicator.className = `save-status ${status}`;
+    indicator.style.display = 'inline-flex';
+    
+    // Hide after 3 seconds if saved
+    if (status === 'saved') {
+        setTimeout(() => {
+            indicator.style.display = 'none';
+        }, 3000);
+    }
+}
+
+// ============ Start Application ============
+
 init();
 
 // Expose functions to window for onclick handlers
@@ -384,9 +688,11 @@ Object.assign(window, {
     editPrompt,
     closeModal,
     savePrompt,
+    handleDelete,
     setCategory,
     setTag,
     setSearch,
     loginWithGitHub,
-    logout
+    logout,
+    enableAutoSave
 });
