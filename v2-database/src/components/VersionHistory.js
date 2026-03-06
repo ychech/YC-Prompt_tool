@@ -336,4 +336,10 @@ class VersionHistory {
   }
 }
 
-export default VersionHistory;
+// Export for ES modules
+export { VersionHistory };
+
+// Also expose to window for non-module usage
+if (typeof window !== 'undefined') {
+  window.VersionHistory = VersionHistory;
+}

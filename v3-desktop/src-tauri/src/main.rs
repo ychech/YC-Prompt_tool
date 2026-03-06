@@ -9,7 +9,10 @@
 use std::fs;
 use std::path::PathBuf;
 use tauri::api::dialog;
-use tauri::{command, generate_context, generate_handler, Builder, Manager, State};
+use tauri::{
+    command, generate_context, generate_handler, Builder, Manager, State, SystemTray, SystemTrayEvent,
+    SystemTrayMenu, SystemTrayMenuItem, CustomMenuItem, WindowEvent, RunEvent,
+};
 use serde::{Deserialize, Serialize};
 
 // Data structures
@@ -180,7 +183,35 @@ fn get_shortcut_display(action: String) -> String {
     }
 }
 
+/// Show window
+#[command]
+fn show_window(window: tauri::Window) {
+    let _ = window.show();
+    let _ = window.set_focus();
+}
+
+/// Hide window (minimize to tray)
+#[command]
+fn hide_window(window: tauri::Window) {
+    let _ = window.hide();
+}
+
+/// Quit application
+#[command]
+fn quit_app(app_handle: tauri::AppHandle) {
+    app_handle.exit(0);
+}
+
 fn main() {
+    // Create system tray menu
+    let tray_menu = SystemTrayMenu::new()
+        .add_item(CustomMenuItem::new("show", "显示窗口"))
+        .add_item(CustomMenuItem::new("new_prompt", "新建提示词"))
+        .add_native_item(SystemTrayMenuItem::Separator)
+        .add_item(CustomMenuItem::new("quit", "退出"));
+
+    let system_tray = SystemTray::new().with_menu(tray_menu);
+
     Builder::default()
         .setup(|app| {
             // Initialize state
@@ -197,6 +228,51 @@ fn main() {
             
             Ok(())
         })
+        .system_tray(system_tray)
+        .on_system_tray_event(|app, event| {
+            match event {
+                SystemTrayEvent::LeftClick {
+                    position: _,
+                    size: _,
+                    ..
+                } => {
+                    let window = app.get_window("main").unwrap();
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+                SystemTrayEvent::MenuItemClick { id, .. } => {
+                    match id.as_str() {
+                        "show" => {
+                            let window = app.get_window("main").unwrap();
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                        "new_prompt" => {
+                            let window = app.get_window("main").unwrap();
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                            // Emit event to frontend
+                            let _ = window.emit("new-prompt", ());
+                        }
+                        "quit" => {
+                            app.exit(0);
+                        }
+                        _ => {}
+                    }
+                }
+                _ => {}
+            }
+        })
+        .on_window_event(|event| {
+            match event.event() {
+                WindowEvent::CloseRequested { api, .. } => {
+                    // Hide window instead of closing (minimize to tray)
+                    event.window().hide().unwrap();
+                    api.prevent_close();
+                }
+                _ => {}
+            }
+        })
         .invoke_handler(generate_handler![
             load_prompts,
             save_prompts,
@@ -205,8 +281,17 @@ fn main() {
             export_to_file,
             get_data_dir,
             get_platform,
-            get_shortcut_display
+            get_shortcut_display,
+            show_window,
+            hide_window,
+            quit_app
         ])
-        .run(generate_context!())
-        .expect("error while running tauri application");
+        .build(generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app_handle, event| match event {
+            RunEvent::ExitRequested { api, .. } => {
+                api.prevent_exit();
+            }
+            _ => {}
+        });
 }

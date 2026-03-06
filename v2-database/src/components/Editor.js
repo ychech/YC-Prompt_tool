@@ -469,11 +469,10 @@ class Editor {
   }
 }
 
-// Export for different module systems
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = Editor;
-}
+// Export for ES modules
+export { Editor };
 
+// Also expose to window for non-module usage
 if (typeof window !== 'undefined') {
   window.Editor = Editor;
 }

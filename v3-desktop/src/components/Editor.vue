@@ -77,7 +77,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 
 // Props and Emits
 const props = defineProps({
@@ -368,8 +368,6 @@ onUnmounted(() => {
   if (timeUpdateInterval) clearInterval(timeUpdateInterval)
 })
 
-// Helper for nextTick
-import { nextTick } from 'vue'
 </script>
 
 <style scoped>

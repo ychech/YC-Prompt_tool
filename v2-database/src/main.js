@@ -1,6 +1,10 @@
 // YC Prompt Tool v2 - Database Version
 // Vue 3 style vanilla JS implementation with real API integration
 
+// Import components
+import { Editor } from './components/Editor.js';
+import { VersionHistory } from './components/VersionHistory.js';
+
 const API_BASE = '/api';
 
 // State
@@ -21,7 +25,13 @@ const state = {
     currentTag: null,
     searchQuery: '',
     isDarkMode: false,
-    isLoading: false
+    isLoading: false,
+    isVersionPanelOpen: false,
+    currentEditingPrompt: null,
+    currentPromptVersions: [],
+    toasts: [],
+    editorInstance: null,
+    versionHistoryInstance: null
 };
 
 // DOM Elements
@@ -151,10 +161,44 @@ async function fetchTags() {
     return apiRequest(`${API_BASE}/tags`);
 }
 
+/**
+ * GET /api/prompts/:id/versions - Get prompt versions
+ */
+async function fetchPromptVersions(promptId) {
+    return apiRequest(`${API_BASE}/prompts/${promptId}/versions`);
+}
+
+/**
+ * POST /api/prompts/:id/versions/:versionId/restore - Restore version
+ */
+async function restorePromptVersion(promptId, versionId) {
+    return apiRequest(`${API_BASE}/prompts/${promptId}/versions/${versionId}/restore`, {
+        method: 'POST'
+    });
+}
+
+/**
+ * POST /api/prompts/:id/toggle-featured - Toggle featured status
+ */
+async function togglePromptFeatured(id) {
+    return apiRequest(`${API_BASE}/prompts/${id}/toggle-featured`, {
+        method: 'POST'
+    });
+}
+
 // ============ Initialize ============
 
 function init() {
     appEl = document.getElementById('app');
+    
+    // Check for saved dark mode preference
+    const savedDarkMode = localStorage.getItem('dark_mode');
+    if (savedDarkMode !== null) {
+        state.isDarkMode = savedDarkMode === 'true';
+    } else {
+        // Check system preference
+        state.isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
     
     // Check auth
     const token = localStorage.getItem('auth_token');
@@ -170,7 +214,7 @@ function init() {
 // Render Login Page
 function renderLogin() {
     appEl.innerHTML = `
-        <div class="login-page">
+        <div class="login-page" data-theme="${state.isDarkMode ? 'dark' : ''}">
             <div class="login-box">
                 <h1><i class="fas fa-feather-alt" style="color: var(--accent);"></i> YC 提示词工具</h1>
                 <p>v2.0 数据库版 - 支持所有浏览器</p>
@@ -182,6 +226,7 @@ function renderLogin() {
                         <li>✅ 支持 Safari、Firefox、Chrome、Edge</li>
                         <li>✅ 数据云端同步，多设备互通</li>
                         <li>✅ 实时自动保存</li>
+                        <li>✅ 版本历史管理</li>
                         <li>✅ 团队协作（即将推出）</li>
                     </ul>
                 </div>
@@ -221,13 +266,13 @@ function renderApp() {
     const filteredPrompts = filterPrompts();
     
     appEl.innerHTML = `
-        <div class="app" data-theme="${state.isDarkMode ? 'dark' : ''}">
-            <header class="header">
+        <div class="app-container" data-theme="${state.isDarkMode ? 'dark' : ''}">
+            <header class="header" data-theme="${state.isDarkMode ? 'dark' : ''}">
                 <div class="logo">
                     <i class="fas fa-feather-alt"></i> YC提示词工具 v2
                 </div>
                 <div class="header-actions">
-                    <button class="btn btn-ghost" onclick="toggleDarkMode()">
+                    <button class="btn btn-ghost" onclick="toggleDarkMode()" title="切换主题">
                         <i class="fas ${state.isDarkMode ? 'fa-sun' : 'fa-moon'}"></i>
                     </button>
                     <button class="btn btn-primary" onclick="showAddModal()">
@@ -236,14 +281,14 @@ function renderApp() {
                     <div class="user-info">
                         <img src="${state.user?.avatar || 'https://github.com/github.png'}" class="user-avatar" alt="avatar">
                         <span>${state.user?.username || 'User'}</span>
-                        <button class="btn btn-ghost" onclick="logout()" style="padding: 4px 8px;">
+                        <button class="btn btn-ghost" onclick="logout()" style="padding: 4px 8px;" title="退出登录">
                             <i class="fas fa-sign-out-alt"></i>
                         </button>
                     </div>
                 </div>
             </header>
             
-            <div class="main">
+            <div class="main-layout ${state.isVersionPanelOpen ? 'has-version-panel' : ''}">
                 <aside class="sidebar">
                     <div class="sidebar-section">
                         <div class="sidebar-title">分类</div>
@@ -252,6 +297,7 @@ function renderApp() {
                                 <li class="category-item ${state.currentCategory === cat.id ? 'active' : ''}" 
                                     onclick="setCategory('${cat.id}')">
                                     <span><i class="fas ${cat.icon}"></i> ${cat.name}</span>
+                                    ${cat.id !== 'all' ? `<span class="category-count">${getCategoryCount(cat.id)}</span>` : ''}
                                 </li>
                             `).join('')}
                         </ul>
@@ -259,97 +305,234 @@ function renderApp() {
                     
                     <div class="sidebar-section">
                         <div class="sidebar-title">标签</div>
-                        <ul class="tag-list">
+                        <div class="tag-cloud">
                             ${state.tags.map(tag => `
-                                <li class="tag-item ${state.currentTag === tag ? 'active' : ''}"
-                                    onclick="setTag('${tag}')">
-                                    <span><i class="fas fa-tag"></i> ${tag}</span>
-                                </li>
+                                <span class="tag-chip ${state.currentTag === tag ? 'active' : ''}"
+                                      onclick="setTag('${escapeHtml(tag)}')">
+                                    ${escapeHtml(tag)}
+                                </span>
                             `).join('')}
-                        </ul>
+                        </div>
+                        ${state.tags.length === 0 ? '<p class="empty-tags">暂无标签</p>' : ''}
                     </div>
                 </aside>
                 
-                <main class="content">
+                <main class="content-area">
                     <div class="toolbar">
                         <div class="search-box">
                             <i class="fas fa-search"></i>
                             <input type="text" placeholder="搜索提示词..." 
-                                   value="${state.searchQuery}" 
+                                   value="${escapeHtml(state.searchQuery)}" 
                                    oninput="setSearch(this.value)">
                         </div>
-                        <div style="color: var(--text-muted); font-size: 0.9rem;">
-                            共 ${filteredPrompts.length} 个提示词
+                        <div class="toolbar-info">
+                            共 <strong>${filteredPrompts.length}</strong> 个提示词
                         </div>
                     </div>
                     
-                    <div class="prompt-grid">
-                        ${filteredPrompts.map(prompt => `
-                            <div class="prompt-card" onclick="editPrompt('${prompt.id}')">
-                                <div class="prompt-title">
-                                    ${escapeHtml(prompt.title)}
-                                    <i class="fas fa-star" style="color: ${prompt.is_featured ? 'var(--warning)' : 'transparent'};"></i>
-                                </div>
-                                <div class="prompt-content">${escapeHtml(prompt.content)}</div>
-                                <div class="prompt-meta">
-                                    <span><i class="fas fa-folder"></i> ${getCategoryName(prompt.category)}</span>
-                                    <span><i class="fas fa-clock"></i> ${formatDate(prompt.updated_at)}</span>
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
+                    ${filteredPrompts.length === 0 ? `
+                        <div class="empty-state">
+                            <i class="fas fa-inbox"></i>
+                            <p>暂无提示词</p>
+                            <button class="btn btn-primary" onclick="showAddModal()">
+                                <i class="fas fa-plus"></i> 创建第一个提示词
+                            </button>
+                        </div>
+                    ` : `
+                        <div class="prompt-grid">
+                            ${filteredPrompts.map(prompt => renderPromptCard(prompt)).join('')}
+                        </div>
+                    `}
                 </main>
+                
+                ${state.isVersionPanelOpen ? renderVersionPanel() : ''}
             </div>
         </div>
         
-        ${renderModal()}
+        ${renderEditorModal()}
         ${renderLoadingSpinner()}
         ${renderToastContainer()}
     `;
+    
+    // Initialize version history panel if open
+    if (state.isVersionPanelOpen && state.currentEditingPrompt) {
+        initVersionHistory();
+    }
 }
 
-// Render Modal
-function renderModal() {
+// Render Prompt Card
+function renderPromptCard(prompt) {
+    const tagsHtml = prompt.tags?.map(tag => 
+        `<span class="card-tag">${escapeHtml(tag)}</span>`
+    ).join('') || '';
+    
     return `
-        <div class="modal-overlay" id="promptModal">
-            <div class="modal">
+        <div class="prompt-card" data-id="${prompt.id}">
+            <div class="prompt-card-header">
+                <h3 class="prompt-title" onclick="editPrompt('${prompt.id}')">
+                    ${escapeHtml(prompt.title)}
+                </h3>
+                <div class="prompt-actions">
+                    <button class="btn-icon btn-star ${prompt.is_featured ? 'active' : ''}" 
+                            onclick="toggleFeatured('${prompt.id}', event)"
+                            title="${prompt.is_featured ? '取消收藏' : '收藏'}">
+                        <i class="fas fa-star"></i>
+                    </button>
+                    <button class="btn-icon" onclick="showVersionHistory('${prompt.id}', event)" title="版本历史">
+                        <i class="fas fa-history"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="prompt-content" onclick="editPrompt('${prompt.id}')">
+                ${escapeHtml(prompt.content.substring(0, 150))}${prompt.content.length > 150 ? '...' : ''}
+            </div>
+            <div class="prompt-card-footer">
+                <div class="prompt-meta">
+                    <span class="meta-item"><i class="fas fa-folder"></i> ${getCategoryName(prompt.category)}</span>
+                    <span class="meta-item"><i class="fas fa-clock"></i> ${formatDate(prompt.updated_at)}</span>
+                </div>
+                ${tagsHtml ? `<div class="prompt-tags">${tagsHtml}</div>` : ''}
+            </div>
+        </div>
+    `;
+}
+
+// Render Editor Modal
+function renderEditorModal() {
+    return `
+        <div class="modal-overlay" id="editorModal" onclick="closeModalOnBackdrop(event)">
+            <div class="modal modal-editor" onclick="event.stopPropagation()">
                 <div class="modal-header">
                     <h3 id="modalTitle">新建提示词</h3>
-                    <button class="btn btn-ghost" onclick="closeModal()">
-                        <i class="fas fa-times"></i>
-                    </button>
+                    <div class="modal-header-actions">
+                        <span id="saveStatus" class="save-status" style="display: none;"></span>
+                        <button class="btn btn-ghost" onclick="closeModal()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
                 </div>
                 <div class="modal-body">
                     <input type="hidden" id="promptId">
-                    <div class="form-group">
-                        <label class="form-label">标题</label>
-                        <input type="text" class="form-input" id="promptTitle" placeholder="输入标题">
+                    <div class="form-row">
+                        <div class="form-group form-group-title">
+                            <label class="form-label">标题 <span class="required">*</span></label>
+                            <input type="text" class="form-input" id="promptTitle" placeholder="输入提示词标题">
+                        </div>
+                        <div class="form-group form-group-category">
+                            <label class="form-label">分类</label>
+                            <select class="form-select" id="promptCategory">
+                                ${state.categories.filter(c => c.id !== 'all').map(cat => `
+                                    <option value="${cat.id}">${cat.name}</option>
+                                `).join('')}
+                            </select>
+                        </div>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">分类</label>
-                        <select class="form-select" id="promptCategory">
-                            ${state.categories.filter(c => c.id !== 'all').map(cat => `
-                                <option value="${cat.id}">${cat.name}</option>
-                            `).join('')}
-                        </select>
+                        <label class="form-label">内容 <span class="required">*</span></label>
+                        <div id="editorContainer" class="editor-container"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group form-group-tags">
+                            <label class="form-label">标签</label>
+                            <input type="text" class="form-input" id="promptTags" placeholder="用逗号分隔多个标签">
+                        </div>
+                        <div class="form-group form-group-version">
+                            <label class="form-label">版本号</label>
+                            <input type="text" class="form-input" id="promptVersion" placeholder="例如：v1.0">
+                        </div>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">内容</label>
-                        <textarea class="form-textarea" id="promptContent" placeholder="输入提示词内容..."></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">标签（用逗号分隔）</label>
-                        <input type="text" class="form-input" id="promptTags" placeholder="标签1, 标签2, 标签3">
+                        <label class="form-label">备注</label>
+                        <textarea class="form-textarea" id="promptNotes" placeholder="添加备注信息..." rows="2"></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-ghost" onclick="closeModal()">取消</button>
-                    <button class="btn btn-danger" id="deleteBtn" onclick="handleDelete()" style="display: none; margin-right: auto;">删除</button>
-                    <button class="btn btn-primary" onclick="savePrompt()">保存</button>
+                    <button class="btn btn-danger" id="deleteBtn" onclick="handleDelete()" style="display: none;">
+                        <i class="fas fa-trash"></i> 删除
+                    </button>
+                    <button class="btn btn-secondary" onclick="showVersionHistoryFromModal()">
+                        <i class="fas fa-history"></i> 版本历史
+                    </button>
+                    <button class="btn btn-primary" onclick="savePrompt()">
+                        <i class="fas fa-save"></i> 保存
+                    </button>
                 </div>
             </div>
         </div>
     `;
+}
+
+// Render Version Panel
+function renderVersionPanel() {
+    return `
+        <aside class="version-panel" id="versionPanel">
+            <div class="version-panel-header">
+                <h3><i class="fas fa-history"></i> 版本历史</h3>
+                <button class="btn-icon" onclick="closeVersionPanel()" title="关闭">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div id="versionHistoryContainer" class="version-history-container"></div>
+        </aside>
+    `;
+}
+
+// ============ Component Initialization ============
+
+function initEditor(content = '') {
+    const container = document.getElementById('editorContainer');
+    if (!container) return;
+    
+    // Destroy existing instance if any
+    if (state.editorInstance) {
+        state.editorInstance.destroy();
+    }
+    
+    state.editorInstance = new Editor(container, {
+        value: content,
+        onChange: (value) => {
+            // Trigger auto-save indicator
+            showSaveStatus('saving');
+        },
+        onSave: (value) => {
+            savePrompt();
+        }
+    });
+}
+
+function initVersionHistory() {
+    const container = document.getElementById('versionHistoryContainer');
+    if (!container) return;
+    
+    // Destroy existing instance if any
+    if (state.versionHistoryInstance) {
+        state.versionHistoryInstance.destroy();
+    }
+    
+    state.versionHistoryInstance = new VersionHistory(container, {
+        versions: state.currentPromptVersions,
+        onRestore: async (version) => {
+            try {
+                if (state.currentEditingPrompt) {
+                    await restorePromptVersion(state.currentEditingPrompt.id, version.id);
+                    showToast('版本已恢复', 'success');
+                    // Reload and refresh
+                    await loadPrompts();
+                    if (state.editorInstance) {
+                        state.editorInstance.setValue(version.content);
+                    }
+                    // Refresh version list
+                    await loadPromptVersions(state.currentEditingPrompt.id);
+                }
+            } catch (error) {
+                console.error('Restore version failed:', error);
+            }
+        },
+        onPreview: (version) => {
+            // Preview is handled internally by VersionHistory component
+        }
+    });
 }
 
 // ============ Filter Functions ============
@@ -367,6 +550,10 @@ function filterPrompts() {
     });
 }
 
+function getCategoryCount(categoryId) {
+    return state.prompts.filter(p => p.category === categoryId).length;
+}
+
 // ============ Action Functions ============
 
 function setCategory(id) {
@@ -382,73 +569,188 @@ function setTag(tag) {
 
 function setSearch(value) {
     state.searchQuery = value;
-    renderApp();
+    // Debounce re-render
+    clearTimeout(window.searchDebounce);
+    window.searchDebounce = setTimeout(() => {
+        renderApp();
+    }, 300);
 }
 
 function toggleDarkMode() {
     state.isDarkMode = !state.isDarkMode;
+    localStorage.setItem('dark_mode', state.isDarkMode);
     renderApp();
 }
 
 function showAddModal() {
+    state.currentEditingPrompt = null;
+    state.currentPromptVersions = [];
+    
     document.getElementById('promptId').value = '';
     document.getElementById('promptTitle').value = '';
-    document.getElementById('promptContent').value = '';
+    document.getElementById('promptCategory').value = 'other';
     document.getElementById('promptTags').value = '';
+    document.getElementById('promptVersion').value = '';
+    document.getElementById('promptNotes').value = '';
     document.getElementById('modalTitle').textContent = '新建提示词';
     document.getElementById('deleteBtn').style.display = 'none';
-    document.getElementById('promptModal').classList.add('active');
+    
+    // Initialize editor
+    initEditor('');
+    
+    document.getElementById('editorModal').classList.add('active');
 }
 
-function editPrompt(id) {
+async function editPrompt(id) {
     const prompt = state.prompts.find(p => p.id === id);
-    if (!prompt) return;
+    if (!prompt) {
+        showToast('提示词不存在', 'error');
+        return;
+    }
+    
+    state.currentEditingPrompt = prompt;
     
     document.getElementById('promptId').value = prompt.id;
     document.getElementById('promptTitle').value = prompt.title;
-    document.getElementById('promptContent').value = prompt.content;
-    document.getElementById('promptCategory').value = prompt.category;
+    document.getElementById('promptCategory').value = prompt.category || 'other';
     document.getElementById('promptTags').value = prompt.tags?.join(', ') || '';
+    document.getElementById('promptVersion').value = prompt.version || '';
+    document.getElementById('promptNotes').value = prompt.notes || '';
     document.getElementById('modalTitle').textContent = '编辑提示词';
-    document.getElementById('deleteBtn').style.display = 'inline-block';
-    document.getElementById('promptModal').classList.add('active');
+    document.getElementById('deleteBtn').style.display = 'inline-flex';
+    
+    // Initialize editor with content
+    initEditor(prompt.content);
+    
+    document.getElementById('editorModal').classList.add('active');
+    
+    // Load versions in background
+    await loadPromptVersions(id);
+}
+
+async function loadPromptVersions(promptId) {
+    try {
+        const versions = await fetchPromptVersions(promptId);
+        state.currentPromptVersions = versions || [];
+        
+        // Update version history if panel is open
+        if (state.isVersionPanelOpen && state.versionHistoryInstance) {
+            state.versionHistoryInstance.updateVersions(state.currentPromptVersions);
+        }
+    } catch (error) {
+        console.error('Failed to load versions:', error);
+        state.currentPromptVersions = [];
+    }
+}
+
+function showVersionHistory(promptId, event) {
+    if (event) {
+        event.stopPropagation();
+    }
+    
+    const prompt = state.prompts.find(p => p.id === promptId);
+    if (prompt) {
+        state.currentEditingPrompt = prompt;
+        state.isVersionPanelOpen = true;
+        renderApp();
+        loadPromptVersions(promptId);
+    }
+}
+
+function showVersionHistoryFromModal() {
+    const promptId = document.getElementById('promptId').value;
+    if (promptId) {
+        state.isVersionPanelOpen = true;
+        renderApp();
+        loadPromptVersions(promptId);
+    } else {
+        showToast('请先保存提示词', 'warning');
+    }
+}
+
+function closeVersionPanel() {
+    state.isVersionPanelOpen = false;
+    renderApp();
 }
 
 function closeModal() {
-    document.getElementById('promptModal').classList.remove('active');
+    document.getElementById('editorModal').classList.remove('active');
+    
+    // Clean up editor instance
+    if (state.editorInstance) {
+        state.editorInstance.destroy();
+        state.editorInstance = null;
+    }
+    
+    state.currentEditingPrompt = null;
+    state.currentPromptVersions = [];
+}
+
+function closeModalOnBackdrop(event) {
+    if (event.target === event.currentTarget) {
+        closeModal();
+    }
 }
 
 async function savePrompt() {
     const id = document.getElementById('promptId').value;
     const title = document.getElementById('promptTitle').value.trim();
-    const content = document.getElementById('promptContent').value.trim();
     const category = document.getElementById('promptCategory').value;
     const tagsStr = document.getElementById('promptTags').value;
+    const version = document.getElementById('promptVersion').value.trim();
+    const notes = document.getElementById('promptNotes').value.trim();
     
-    if (!title || !content) {
-        showToast('请填写标题和内容', 'error');
+    // Get content from editor
+    const content = state.editorInstance ? state.editorInstance.getValue().trim() : '';
+    
+    if (!title) {
+        showToast('请填写标题', 'error');
+        document.getElementById('promptTitle').focus();
+        return;
+    }
+    
+    if (!content) {
+        showToast('请填写内容', 'error');
+        if (state.editorInstance) {
+            state.editorInstance.focus();
+        }
         return;
     }
     
     const tags = tagsStr.split(',').map(t => t.trim()).filter(Boolean);
     
-    const promptData = { title, content, category, tags };
+    const promptData = { 
+        title, 
+        content, 
+        category, 
+        tags,
+        version,
+        notes
+    };
     
     try {
+        showSaveStatus('saving');
+        
         if (id) {
             // Update existing prompt
             await updatePrompt(id, promptData);
-            showToast('提示词已更新');
+            showToast('提示词已更新', 'success');
         } else {
             // Create new prompt
-            await createPrompt(promptData);
-            showToast('提示词已创建');
+            const result = await createPrompt(promptData);
+            state.currentEditingPrompt = result;
+            document.getElementById('promptId').value = result.id;
+            document.getElementById('modalTitle').textContent = '编辑提示词';
+            document.getElementById('deleteBtn').style.display = 'inline-flex';
+            showToast('提示词已创建', 'success');
         }
         
-        closeModal();
+        showSaveStatus('saved');
         await loadPrompts();
+        renderApp();
+        
     } catch (error) {
-        // Error already handled by apiRequest
+        showSaveStatus('error');
         console.error('Save prompt failed:', error);
     }
 }
@@ -457,17 +759,33 @@ async function handleDelete() {
     const id = document.getElementById('promptId').value;
     if (!id) return;
     
-    if (!confirm('确定要删除这个提示词吗？')) {
+    if (!confirm('确定要删除这个提示词吗？此操作不可恢复。')) {
         return;
     }
     
     try {
         await deletePrompt(id);
-        showToast('提示词已删除');
+        showToast('提示词已删除', 'success');
         closeModal();
         await loadPrompts();
+        renderApp();
     } catch (error) {
         console.error('Delete prompt failed:', error);
+    }
+}
+
+async function toggleFeatured(id, event) {
+    if (event) {
+        event.stopPropagation();
+    }
+    
+    try {
+        const result = await togglePromptFeatured(id);
+        showToast(result.is_featured ? '已收藏' : '已取消收藏', 'success');
+        await loadPrompts();
+        renderApp();
+    } catch (error) {
+        console.error('Toggle featured failed:', error);
     }
 }
 
@@ -482,13 +800,18 @@ async function loadUser() {
     };
     
     // Load all data from real API
-    await Promise.all([
-        loadPrompts(),
-        loadCategories(),
-        loadTags()
-    ]);
-    
-    renderApp();
+    try {
+        await Promise.all([
+            loadPrompts(),
+            loadCategories(),
+            loadTags()
+        ]);
+        
+        renderApp();
+    } catch (error) {
+        console.error('Failed to load initial data:', error);
+        showToast('加载数据失败，请刷新重试', 'error');
+    }
 }
 
 async function loadPrompts() {
@@ -498,6 +821,7 @@ async function loadPrompts() {
     } catch (error) {
         state.prompts = [];
         console.error('Failed to load prompts:', error);
+        throw error;
     }
 }
 
@@ -541,10 +865,14 @@ function loginWithGitHub() {
 }
 
 function logout() {
+    if (!confirm('确定要退出登录吗？')) {
+        return;
+    }
     localStorage.removeItem('auth_token');
     state.user = null;
     state.prompts = [];
     renderLogin();
+    showToast('已退出登录', 'success');
 }
 
 // ============ Utility Functions ============
@@ -555,7 +883,19 @@ function showToast(message, type = 'success') {
     
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
-    toast.textContent = message;
+    
+    const icons = {
+        success: 'fa-check-circle',
+        error: 'fa-exclamation-circle',
+        warning: 'fa-exclamation-triangle',
+        info: 'fa-info-circle'
+    };
+    
+    toast.innerHTML = `
+        <i class="fas ${icons[type] || icons.info}"></i>
+        <span>${message}</span>
+    `;
+    
     container.appendChild(toast);
     
     // Animate in
@@ -570,85 +910,6 @@ function showToast(message, type = 'success') {
     }, 3000);
 }
 
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-function getCategoryName(id) {
-    return state.categories.find(c => c.id === id)?.name || id;
-}
-
-function formatDate(dateStr) {
-    if (!dateStr) return '-';
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('zh-CN');
-}
-
-// ============ Auto Save ============
-
-let autoSaveTimer = null;
-let lastSavedContent = '';
-
-/**
- * Enable auto-save for a textarea
- */
-function enableAutoSave(textareaId, saveCallback, delay = 3000) {
-    const textarea = document.getElementById(textareaId);
-    if (!textarea) return;
-    
-    // Store initial content
-    lastSavedContent = textarea.value;
-    
-    textarea.addEventListener('input', () => {
-        // Clear existing timer
-        if (autoSaveTimer) {
-            clearTimeout(autoSaveTimer);
-        }
-        
-        // Show saving indicator
-        showSaveStatus('saving');
-        
-        // Set new timer
-        autoSaveTimer = setTimeout(async () => {
-            const currentContent = textarea.value;
-            
-            // Only save if content changed
-            if (currentContent !== lastSavedContent) {
-                try {
-                    await saveCallback(currentContent);
-                    lastSavedContent = currentContent;
-                    showSaveStatus('saved');
-                } catch (e) {
-                    showSaveStatus('error');
-                }
-            }
-        }, delay);
-    });
-    
-    // Save on blur
-    textarea.addEventListener('blur', async () => {
-        if (autoSaveTimer) {
-            clearTimeout(autoSaveTimer);
-        }
-        
-        const currentContent = textarea.value;
-        if (currentContent !== lastSavedContent) {
-            try {
-                await saveCallback(currentContent);
-                lastSavedContent = currentContent;
-                showSaveStatus('saved');
-            } catch (e) {
-                showSaveStatus('error');
-            }
-        }
-    });
-}
-
-/**
- * Show save status indicator
- */
 function showSaveStatus(status) {
     const indicator = document.getElementById('saveStatus');
     if (!indicator) return;
@@ -665,8 +926,14 @@ function showSaveStatus(status) {
         error: '保存失败'
     };
     
+    const colors = {
+        saving: 'var(--text-muted)',
+        saved: 'var(--success)',
+        error: 'var(--error)'
+    };
+    
     indicator.innerHTML = `${icons[status]} ${texts[status]}`;
-    indicator.className = `save-status ${status}`;
+    indicator.style.color = colors[status];
     indicator.style.display = 'inline-flex';
     
     // Hide after 3 seconds if saved
@@ -676,6 +943,75 @@ function showSaveStatus(status) {
         }, 3000);
     }
 }
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function getCategoryName(id) {
+    return state.categories.find(c => c.id === id)?.name || id;
+}
+
+function formatDate(dateStr) {
+    if (!dateStr) return '-';
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diff = now - date;
+    
+    // Less than 24 hours
+    if (diff < 24 * 60 * 60 * 1000) {
+        const hours = Math.floor(diff / (60 * 60 * 1000));
+        if (hours < 1) {
+            const minutes = Math.floor(diff / (60 * 1000));
+            return minutes < 1 ? '刚刚' : `${minutes}分钟前`;
+        }
+        return `${hours}小时前`;
+    }
+    
+    // Less than 7 days
+    if (diff < 7 * 24 * 60 * 60 * 1000) {
+        const days = Math.floor(diff / (24 * 60 * 60 * 1000));
+        return `${days}天前`;
+    }
+    
+    return date.toLocaleDateString('zh-CN');
+}
+
+// ============ Keyboard Shortcuts ============
+
+document.addEventListener('keydown', (e) => {
+    // Close modal on Escape
+    if (e.key === 'Escape') {
+        const modal = document.getElementById('editorModal');
+        if (modal && modal.classList.contains('active')) {
+            closeModal();
+        }
+        
+        if (state.isVersionPanelOpen) {
+            closeVersionPanel();
+        }
+    }
+    
+    // New prompt on Ctrl/Cmd + N
+    if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+        e.preventDefault();
+        if (state.user) {
+            showAddModal();
+        }
+    }
+    
+    // Focus search on Ctrl/Cmd + K
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        const searchInput = document.querySelector('.search-box input');
+        if (searchInput) {
+            searchInput.focus();
+        }
+    }
+});
 
 // ============ Start Application ============
 
@@ -687,6 +1023,7 @@ Object.assign(window, {
     showAddModal,
     editPrompt,
     closeModal,
+    closeModalOnBackdrop,
     savePrompt,
     handleDelete,
     setCategory,
@@ -694,5 +1031,8 @@ Object.assign(window, {
     setSearch,
     loginWithGitHub,
     logout,
-    enableAutoSave
+    toggleFeatured,
+    showVersionHistory,
+    showVersionHistoryFromModal,
+    closeVersionPanel
 });
