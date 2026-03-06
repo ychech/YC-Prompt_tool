@@ -30,6 +30,14 @@ const app = createApp({
             isDarkMode: false,
             currentFile: null,
             
+            // Platform
+            platform: 'win32', // win32 | darwin | linux
+            shortcuts: {
+                save: 'Ctrl+S',
+                open: 'Ctrl+O',
+                new: 'Ctrl+N'
+            },
+            
             // Modal
             showModal: false,
             editingPrompt: null,
@@ -65,20 +73,30 @@ const app = createApp({
     },
     
     async mounted() {
+        // Detect platform
+        this.platform = await invoke('get_platform')
+        
+        // Load shortcuts for current platform
+        this.shortcuts.save = await invoke('get_shortcut_display', { action: 'save' })
+        this.shortcuts.open = await invoke('get_shortcut_display', { action: 'open' })
+        this.shortcuts.new = await invoke('get_shortcut_display', { action: 'new' })
+        
         // Load data on startup
         await this.loadData()
         
         // Setup keyboard shortcuts
         document.addEventListener('keydown', (e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+            const isMod = this.platform === 'darwin' ? e.metaKey : e.ctrlKey
+            
+            if (isMod && e.key === 's') {
                 e.preventDefault()
                 this.saveData()
             }
-            if ((e.metaKey || e.ctrlKey) && e.key === 'o') {
+            if (isMod && e.key === 'o') {
                 e.preventDefault()
                 this.openFile()
             }
-            if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
+            if (isMod && e.key === 'n') {
                 e.preventDefault()
                 this.showAddModal()
             }

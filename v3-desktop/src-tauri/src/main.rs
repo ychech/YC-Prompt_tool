@@ -153,6 +153,33 @@ fn get_data_dir(state: State<AppState>) -> String {
     state.data_dir.to_string_lossy().to_string()
 }
 
+/// Get current platform
+#[command]
+fn get_platform() -> String {
+    #[cfg(target_os = "windows")]
+    return "win32".to_string();
+    
+    #[cfg(target_os = "macos")]
+    return "darwin".to_string();
+    
+    #[cfg(target_os = "linux")]
+    return "linux".to_string();
+}
+
+/// Get platform-specific shortcut display
+#[command]
+fn get_shortcut_display(action: String) -> String {
+    let is_mac = cfg!(target_os = "macos");
+    
+    match action.as_str() {
+        "save" => if is_mac { "⌘+S".to_string() } else { "Ctrl+S".to_string() },
+        "open" => if is_mac { "⌘+O".to_string() } else { "Ctrl+O".to_string() },
+        "new" => if is_mac { "⌘+N".to_string() } else { "Ctrl+N".to_string() },
+        "search" => if is_mac { "⌘+F".to_string() } else { "Ctrl+F".to_string() },
+        _ => action,
+    }
+}
+
 fn main() {
     Builder::default()
         .setup(|app| {
@@ -176,7 +203,9 @@ fn main() {
             open_file_dialog,
             save_file_dialog,
             export_to_file,
-            get_data_dir
+            get_data_dir,
+            get_platform,
+            get_shortcut_display
         ])
         .run(generate_context!())
         .expect("error while running tauri application");
