@@ -2423,10 +2423,20 @@
         }
 
         // Initialize
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             try {
-                // Try to load from localStorage first (for HTTP deployment compatibility)
-                loadFromLocalStorage();
+                // Mobile: try to load from IndexedDB first
+                if (isMobileDevice()) {
+                    await initIndexedDB();
+                    const hasData = await loadFromIndexedDB();
+                    if (hasData) {
+                        enableMobileAutoSave();
+                        showToast('已从本地恢复数据', 'success');
+                    }
+                } else {
+                    // Desktop: try to load from localStorage
+                    loadFromLocalStorage();
+                }
                 
                 renderCategories();
                 renderPrompts();
@@ -2744,6 +2754,105 @@
             return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         }
         
+        // IndexedDB for mobile auto-save
+        const DB_NAME = 'YCPromptToolDB';
+        const DB_VERSION = 1;
+        const STORE_NAME = 'prompts';
+        let db = null;
+        
+        // Initialize IndexedDB
+        async function initIndexedDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => {
+                    db = request.result;
+                    resolve(db);
+                };
+                
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+                    }
+                };
+            });
+        }
+        
+        // Save to IndexedDB
+        async function saveToIndexedDB() {
+            if (!db) await initIndexedDB();
+            
+            const data = {
+                id: 'current',
+                prompts: prompts,
+                customCategories: customCategories,
+                customTags: Array.from(customTags),
+                featuredPrompts: Array.from(featuredPrompts),
+                promptVersions: promptVersions,
+                updatedAt: Date.now()
+            };
+            
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([STORE_NAME], 'readwrite');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.put(data);
+                
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+            });
+        }
+        
+        // Load from IndexedDB
+        async function loadFromIndexedDB() {
+            if (!db) await initIndexedDB();
+            
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([STORE_NAME], 'readonly');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.get('current');
+                
+                request.onsuccess = () => {
+                    const data = request.result;
+                    if (data) {
+                        prompts = data.prompts || [];
+                        customCategories = data.customCategories || {};
+                        customTags = new Set(data.customTags || []);
+                        featuredPrompts = new Set(data.featuredPrompts || []);
+                        promptVersions = data.promptVersions || {};
+                        resolve(true);
+                    } else {
+                        resolve(false);
+                    }
+                };
+                request.onerror = () => reject(request.error);
+            });
+        }
+        
+        // Auto-save to IndexedDB (for mobile)
+        let autoSaveTimer = null;
+        function enableMobileAutoSave() {
+            // Auto-save on data changes
+            const originalMarkUnsaved = markUnsaved;
+            markUnsaved = function() {
+                originalMarkUnsaved();
+                
+                // Clear existing timer
+                if (autoSaveTimer) clearTimeout(autoSaveTimer);
+                
+                // Set new timer
+                autoSaveTimer = setTimeout(async () => {
+                    try {
+                        await saveToIndexedDB();
+                        console.log('Auto-saved to IndexedDB');
+                    } catch (e) {
+                        console.error('Auto-save failed:', e);
+                    }
+                }, 3000);
+            };
+        }
+        
         async function saveToFile(silent = false) {
             // Validate data before saving
             const validationErrors = validatePromptData({ prompts });
@@ -2771,9 +2880,44 @@
                 return;
             }
             
-            // Mobile fallback: download file
-            if (isMobileDevice() || !currentFileHandle) {
-                // Create download
+            // Mobile: save to IndexedDB + offer download
+            if (isMobileDevice()) {
+                // Save to IndexedDB first
+                try {
+                    await saveToIndexedDB();
+                    hasUnsavedChanges = false;
+                    updateDataSourceStatus();
+                } catch (e) {
+                    console.error('IndexedDB save failed:', e);
+                }
+                
+                // Also download file for backup/sharing
+                const blob = new Blob([data], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                
+                const now = new Date();
+                const dateStr = now.getFullYear() + 
+                    String(now.getMonth() + 1).padStart(2, '0') + 
+                    String(now.getDate()).padStart(2, '0') + '_' +
+                    String(now.getHours()).padStart(2, '0') +
+                    String(now.getMinutes()).padStart(2, '0');
+                a.download = `prompts_${dateStr}.json`;
+                
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                if (!silent) {
+                    showToast('✓ 已保存到本地并下载备份', 'success');
+                }
+                return;
+            }
+            
+            // Desktop without file handle: download
+            if (!currentFileHandle) {
                 const blob = new Blob([data], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
